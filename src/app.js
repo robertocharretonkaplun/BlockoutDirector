@@ -73,9 +73,9 @@ controls.target.set(0, 1, 0);
 controls.enableDamping = true; controls.dampingFactor = 0.09;
 controls.maxPolarAngle = Math.PI * 0.495;
 controls.minDistance = 0.4; controls.maxDistance = 160;
-// Navegación estilo Unreal: el clic izquierdo queda libre para el "vuelo" (ver más abajo).
-// Orbitar = botón central o Alt+clic izquierdo; paneo = clic derecho; zoom = rueda.
-controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.ROTATE, RIGHT: THREE.MOUSE.PAN };
+// Clic izquierdo arrastra/orbita; un clic corto sigue seleccionando objetos en pointerup.
+// Rueda = zoom; clic derecho = paneo.
+controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
 
 // cielo degradado
 const skyMat = new THREE.ShaderMaterial({

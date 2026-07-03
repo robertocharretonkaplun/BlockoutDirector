@@ -7,6 +7,17 @@ y el proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
 
 ---
 
+## [0.6.1] - 2026-07-03
+
+### Corregido
+- **Navegación con clic izquierdo en GitHub Pages**: el botón izquierdo vuelve a
+  estar asignado a orbitar la cámara (`THREE.MOUSE.ROTATE`), manteniendo la
+  selección con un clic corto sobre objetos. Esto alinea el comportamiento real
+  con la guía rápida: clic izquierdo + arrastrar orbita, rueda hace zoom y clic
+  derecho hace paneo.
+
+---
+
 ## [0.6.0] - 2026-07-03
 
 ### Añadido
