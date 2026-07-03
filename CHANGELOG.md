@@ -7,6 +7,26 @@ y el proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
 
 ---
 
+## [0.7.0] - 2026-07-03
+
+### Añadido
+- **Navegación de cámara estilo Unreal Engine («vuelo libre»)**: manteniendo
+  pulsado el **clic izquierdo**, el ratón mira alrededor y **WASD** desplaza la
+  cámara en la dirección de vista; **Q/E** baja/sube, **Shift** acelera y la
+  **rueda** ajusta la velocidad de vuelo (con indicador en pantalla). Funciona
+  tanto en la vista libre del director como reencuadrando cualquier cámara desde
+  su perspectiva. Un **clic izquierdo corto** sigue seleccionando objetos, y
+  **Esc** sale del vuelo.
+
+### Cambiado
+- **Reasignación de botones de navegación** (sustituye el esquema de 0.6.1 para
+  adoptar el de Unreal): el clic izquierdo pasa a ser el vuelo; **orbitar** es
+  ahora **botón central** o **Alt+clic izquierdo**; el **clic derecho** sigue
+  haciendo paneo y la **rueda** hace zoom cuando no se está volando.
+- La guía rápida documenta el nuevo esquema de navegación.
+
+---
+
 ## [0.6.1] - 2026-07-03
 
 ### Corregido

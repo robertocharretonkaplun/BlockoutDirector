@@ -163,7 +163,10 @@
     <div class="lc-head">
       <img class="brand-logo" src="./Slate/LogoAO.png" alt="Logo AO">
       <div class="lc-title">Blockout Director<span class="hint" data-i18n>Consola de dirección 3D</span></div>
-      <button class="btn outline" id="lcLang"><i class="ph ph-globe"></i> <span id="lcLangLabel">EN</span></button>
+      <div class="lc-head-actions">
+        <button class="btn outline" id="lcAbout" data-i18n-title title="Acerca de Blockout Director"><i class="ph ph-info"></i> <span data-i18n>About</span></button>
+        <button class="btn outline" id="lcLang"><i class="ph ph-globe"></i> <span id="lcLangLabel">EN</span></button>
+      </div>
     </div>
     <div class="lc-actions">
       <button class="btn primary" id="lcNew"><i class="ph ph-plus"></i> <span data-i18n>Nuevo proyecto</span></button>
@@ -194,6 +197,7 @@
   </div>
 </div>
 
+<div id="flyHud" class="hidden"></div>
 <div id="toast"></div>
 <input type="file" id="fileGlb" accept=".glb" hidden>
 <input type="file" id="fileImport" accept=".json,application/json" hidden>

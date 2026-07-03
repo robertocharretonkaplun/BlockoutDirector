@@ -195,19 +195,113 @@ $('chkShadows').addEventListener('change', e => { env.shadows = e.target.checked
 $('chkFog').addEventListener('change', e => { env.fog = e.target.checked; applyEnv(); });
 $('chkLabels').addEventListener('change', e => { env.labels = e.target.checked; });
 
+// ---------- navegación estilo Unreal: "vuelo libre" con clic izquierdo + WASD ----------
+// Manteniendo el clic izquierdo el ratón mira alrededor y WASD desplaza la cámara
+// (Q/E baja/sube, Shift acelera, rueda ajusta la velocidad). Un clic simple selecciona.
+const fly = {
+  armed: false, active: false, pointerId: null,
+  startX: 0, startY: 0, speed: 6, boost: false,
+  yaw: 0, pitch: 0, consumePick: false,
+  keys: { w: false, a: false, s: false, d: false, q: false, e: false }
+};
+const FLY_THRESH = 4;                       // px para distinguir clic de arrastre
+const FLY_SENS = 0.0026;                     // sensibilidad del ratón
+const _fwd = new THREE.Vector3(), _right = new THREE.Vector3(), _mv = new THREE.Vector3();
+const WORLD_UP = new THREE.Vector3(0, 1, 0);
+const _flyEuler = new THREE.Euler(0, 0, 0, 'YXZ');
+
+function showFlyHud() {
+  $('flyHud').innerHTML =
+    `<i class="ph ph-arrows-out-cardinal"></i> ${t('Vuelo libre')} · <b>WASD</b> ${t('mover')} · ` +
+    `<b>Q/E</b> ${t('bajar/subir')} · Shift ${t('rápido')} · ${t('rueda: velocidad')} <b>${fly.speed.toFixed(1)}</b>`;
+  $('flyHud').classList.remove('hidden');
+}
+function enterFly() {
+  fly.active = true;
+  controls.enabled = false;
+  _flyEuler.setFromQuaternion(viewCam.quaternion, 'YXZ');
+  fly.yaw = _flyEuler.y; fly.pitch = _flyEuler.x;
+  renderer.domElement.style.cursor = 'none';
+  showFlyHud();
+}
+function exitFly() {
+  if (!fly.active) return;
+  fly.active = false;
+  controls.enabled = true;
+  viewCam.getWorldDirection(_fwd);
+  controls.target.copy(viewCam.position).add(_fwd.multiplyScalar(4));
+  controls.update();
+  renderer.domElement.style.cursor = '';
+  $('flyHud').classList.add('hidden');
+  for (const k in fly.keys) fly.keys[k] = false;
+  fly.boost = false;
+}
+function flyTick(dt) {
+  if (!fly.active) return;
+  viewCam.getWorldDirection(_fwd).normalize();
+  _right.crossVectors(_fwd, WORLD_UP).normalize();
+  _mv.set(0, 0, 0);
+  const K = fly.keys;
+  if (K.w) _mv.add(_fwd);
+  if (K.s) _mv.sub(_fwd);
+  if (K.d) _mv.add(_right);
+  if (K.a) _mv.sub(_right);
+  if (K.e) _mv.add(WORLD_UP);
+  if (K.q) _mv.sub(WORLD_UP);
+  if (_mv.lengthSq() > 0) {
+    _mv.normalize().multiplyScalar(fly.speed * (fly.boost ? 3 : 1) * dt);
+    viewCam.position.add(_mv);
+  }
+}
+
 // ---------- selección por clic ----------
 const ray = new THREE.Raycaster();
 const pDown = new THREE.Vector2();
 let downOnGizmo = false;
+// captura: decide antes que OrbitControls si el clic izquierdo orbita (Alt) o arma el vuelo
+renderer.domElement.addEventListener('pointerdown', e => {
+  if (e.button === 0) {
+    controls.mouseButtons.LEFT = e.altKey ? THREE.MOUSE.ROTATE : null;
+    if (!e.altKey && !tc.axis && !tc.dragging) {
+      fly.armed = true; fly.pointerId = e.pointerId;
+      fly.startX = e.clientX; fly.startY = e.clientY;
+    }
+  }
+}, true);
 renderer.domElement.addEventListener('pointerdown', e => {
   pDown.set(e.clientX, e.clientY);
   downOnGizmo = !!tc.axis;
 });
+renderer.domElement.addEventListener('pointermove', e => {
+  if (!fly.armed) return;
+  if (!fly.active) {
+    if (Math.hypot(e.clientX - fly.startX, e.clientY - fly.startY) < FLY_THRESH) return;
+    try { renderer.domElement.setPointerCapture(fly.pointerId); } catch {}
+    enterFly();
+  }
+  fly.yaw -= (e.movementX || 0) * FLY_SENS;
+  fly.pitch = THREE.MathUtils.clamp(fly.pitch - (e.movementY || 0) * FLY_SENS, -1.53, 1.53);
+  _flyEuler.set(fly.pitch, fly.yaw, 0, 'YXZ');
+  viewCam.quaternion.setFromEuler(_flyEuler);
+  e.preventDefault();
+});
+// captura: termina el vuelo antes que el manejador de selección (fase de burbuja)
 renderer.domElement.addEventListener('pointerup', e => {
+  if (fly.active) { exitFly(); fly.consumePick = true; }
+  fly.armed = false; fly.pointerId = null;
+}, true);
+renderer.domElement.addEventListener('pointerup', e => {
+  if (fly.consumePick) { fly.consumePick = false; return; }
   if (e.button !== 0 || downOnGizmo || tc.dragging) return;
   if (Math.hypot(e.clientX - pDown.x, e.clientY - pDown.y) > 5) return;
   pick(e);
 });
+renderer.domElement.addEventListener('wheel', e => {
+  if (!fly.active) return;
+  e.preventDefault();
+  fly.speed = THREE.MathUtils.clamp(fly.speed * (e.deltaY < 0 ? 1.12 : 0.89), 0.5, 120);
+  showFlyHud();
+}, { passive: false });
 function findEnt(id) {
   return R.characters.find(c => c.id === id) || R.props.find(p => p.id === id) || R.cameras.find(c => c.id === id) || null;
 }
@@ -284,7 +378,7 @@ function animate() {
   requestAnimationFrame(animate);
   const dt = clock.getDelta();
   tickPlayback(dt);
-  controls.update();
+  if (fly.active) flyTick(dt); else controls.update();
 
   if (selected) {
     selRing.visible = true;
@@ -329,6 +423,12 @@ addEventListener('keydown', e => {
     }
     return;
   }
+  // durante el vuelo libre, WASD/QE/Shift controlan la cámara (no cambian de herramienta)
+  if (fly.active) {
+    if (k in fly.keys) { fly.keys[k] = true; e.preventDefault(); return; }
+    if (e.key === 'Shift') { fly.boost = true; return; }
+    if (e.key === 'Escape') { exitFly(); return; }
+  }
   if (e.ctrlKey && k === 'z') { e.preventDefault(); doUndo(); }
   else if (e.ctrlKey && k === 'y') { e.preventDefault(); doRedo(); }
   else if (e.ctrlKey && k === 'd') { e.preventDefault(); if (selected) duplicateEnt(selected); }
@@ -342,6 +442,13 @@ addEventListener('keydown', e => {
     else setSelected(null);
   }
 });
+addEventListener('keyup', e => {
+  const k = e.key.toLowerCase();
+  if (k in fly.keys) fly.keys[k] = false;
+  if (e.key === 'Shift') fly.boost = false;
+});
+// si la ventana pierde el foco, soltar todas las teclas de vuelo (evita movimiento "pegado")
+addEventListener('blur', () => { for (const k in fly.keys) fly.keys[k] = false; fly.boost = false; });
 
 // colapsar tarjetas del panel izquierdo
 document.querySelectorAll('#leftPanel .card .hd').forEach(h => {
@@ -2302,12 +2409,31 @@ $('btnGuide').onclick = () => openModal(t('Guia rapida'), `
   </ol>
   <div class="lbl">${t('Controles')}</div>
   <ul style="margin:4px 0;padding-left:18px;line-height:1.7">
-    <li>${t('Clic izquierdo + arrastrar: orbitar. Rueda: zoom. Clic derecho: paneo.')}</li>
+    <li>${t('Navegación estilo Unreal: mantén <b>clic izquierdo</b> y vuela con <b>WASD</b> mientras el ratón mira alrededor (<b>Q/E</b> baja/sube, <b>Shift</b> acelera, la rueda ajusta la velocidad).')}</li>
+    <li>${t('Orbitar: <b>botón central</b> o <b>Alt+clic izquierdo</b>. Paneo: <b>clic derecho</b>. Zoom: <b>rueda</b>.')}</li>
     <li>${t('Clic sobre un objeto: seleccionar. <b>W/E/R</b>: mover / rotar / escalar.')}</li>
     <li>${t('<b>F</b>: centrar vista en la seleccion. <b>Supr</b>: eliminar. <b>Ctrl+D</b>: duplicar. <b>Ctrl+Z / Ctrl+Y</b>: deshacer / rehacer.')}</li>
     <li>${t('En Perspectivas puedes mirar por cualquier camara y reencuadrarla navegando.')}</li>
   </ul>
   <div class="hint">${t('Consejo: entra a la vista de una camara, encuadra navegando y anade keyframes en distintos momentos para crear un travelling suave.')}</div>`);
+
+function openAboutModal() {
+  openModal(t('Acerca de Blockout Director'), `
+    <p style="margin-top:0;line-height:1.55">${t('Blockout Director es una consola de direccion 3D para crear escenas de referencia antes de producir una imagen, video, storyboard o secuencia.')}</p>
+    <div class="lbl">${t('Para que sirve')}</div>
+    <p style="line-height:1.55">${t('Sirve para ordenar personajes, props, luces y camaras en un espacio virtual, definir poses, encuadres, direccion de mirada, relacion espacial y continuidad visual.')}</p>
+    <div class="lbl">${t('Intencionalidad')}</div>
+    <p style="line-height:1.55">${t('Su intencion es convertir una idea abstracta en una referencia clara: una escena que se pueda mirar, ajustar, capturar y compartir sin depender de herramientas complejas de modelado o animacion final.')}</p>
+    <div class="lbl">${t('Uso recomendado')}</div>
+    <ul style="margin:4px 0;padding-left:18px;line-height:1.7">
+      <li>${t('Crea o importa un proyecto desde el lanzador.')}</li>
+      <li>${t('Coloca personajes y objetos para bloquear la composicion.')}</li>
+      <li>${t('Ajusta poses, transforms, camaras e iluminacion.')}</li>
+      <li>${t('Guarda tomas con prompt, captura imagenes o exporta video WebM para previz.')}</li>
+      <li>${t('Exporta un JSON cuando necesites respaldar o compartir la escena completa.')}</li>
+    </ul>
+    <div class="hint">${t('Blockout Director esta pensado como un puente entre la imaginacion, la direccion visual y las herramientas creativas asistidas por IA.')}</div>`);
+}
 
 // ---------- construcción de UI estática ----------
 function buildStaticUI() {
@@ -2451,6 +2577,7 @@ function refreshLanguage() {
 }
 function toggleLang() { setLang(getLang() === 'es' ? 'en' : 'es'); refreshLanguage(); }
 $('btnLang').onclick = toggleLang;
+$('lcAbout').onclick = openAboutModal;
 $('lcLang').onclick = toggleLang;
 
 // ---------- arranque ----------
