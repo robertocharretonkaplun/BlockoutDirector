@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { createPromptTools } from './promptTools.js';
+import { t, getLang, setLang, applyStaticI18n } from './i18n.js';
 
 /* ============================================================
    NUCLEO - utilidades, estado, escena base, selección, render
@@ -16,7 +17,7 @@ const eDeg = e => [+RAD(e.x).toFixed(2), +RAD(e.y).toFixed(2), +RAD(e.z).toFixed
 
 function toast(msg, ms = 2800) {
   const d = document.createElement('div');
-  d.className = 'toastMsg'; d.textContent = msg;
+  d.className = 'toastMsg'; d.textContent = t(msg);
   $('toast').appendChild(d);
   setTimeout(() => d.remove(), ms);
 }
@@ -72,6 +73,9 @@ controls.target.set(0, 1, 0);
 controls.enableDamping = true; controls.dampingFactor = 0.09;
 controls.maxPolarAngle = Math.PI * 0.495;
 controls.minDistance = 0.4; controls.maxDistance = 160;
+// Navegación estilo Unreal: el clic izquierdo queda libre para el "vuelo" (ver más abajo).
+// Orbitar = botón central o Alt+clic izquierdo; paneo = clic derecho; zoom = rueda.
+controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.ROTATE, RIGHT: THREE.MOUSE.PAN };
 
 // cielo degradado
 const skyMat = new THREE.ShaderMaterial({
@@ -260,6 +264,7 @@ function updateLabels() {
 function collectClutter() {
   const list = [grid, selRing, tc];
   for (const c of R.cameras) { list.push(c.viz); if (c.pathViz) list.push(c.pathViz); }
+  for (const e of [...R.characters, ...R.props]) if (e.pathViz) list.push(e.pathViz);
   for (const p of R.props) if (p.type === 'luz' && p.marker) list.push(p.marker);
   return list;
 }
@@ -316,6 +321,14 @@ addEventListener('resize', () => {
 addEventListener('keydown', e => {
   if (e.target.matches('input,textarea,select')) return;
   const k = e.key.toLowerCase();
+  // con el lanzador de proyectos abierto solo se atiende Escape
+  if (!$('launcher').classList.contains('hidden')) {
+    if (e.key === 'Escape') {
+      if (!$('modalBack').classList.contains('hidden')) closeModal();
+      else closeLauncher();
+    }
+    return;
+  }
   if (e.ctrlKey && k === 'z') { e.preventDefault(); doUndo(); }
   else if (e.ctrlKey && k === 'y') { e.preventDefault(); doRedo(); }
   else if (e.ctrlKey && k === 'd') { e.preventDefault(); if (selected) duplicateEnt(selected); }
@@ -467,9 +480,11 @@ function addMannequin(opts = {}) {
   const id = opts.id || uid('char');
   const ent = {
     kind: 'character', charKind: 'mannequin', id,
-    name: opts.name || `Personaje ${R.characters.length + 1}`,
+    name: opts.name || `${t('Personaje')} ${R.characters.length + 1}`,
     role: opts.role || '', emotion: opts.emotion || '', notes: opts.notes || '',
-    colorHex: color, root, joints, mat, poseName: 'De pie', ringScale: 1
+    colorHex: color, root, joints, mat, poseName: 'De pie', ringScale: 1,
+    path: opts.path ? JSON.parse(JSON.stringify(opts.path)) : { interpolation: 'catmullrom', keyframes: [] },
+    pathViz: null
   };
   const p = opts.pos || spawnPos();
   root.position.copy(p instanceof THREE.Vector3 ? p : new THREE.Vector3(...p));
@@ -477,6 +492,7 @@ function addMannequin(opts = {}) {
   tagEnt(root, id);
   scene.add(root);
   R.characters.push(ent);
+  updatePathViz(ent);
   applyPoseByName(ent, opts.pose || 'De pie');
   renderCharList();
   if (!opts.noSelect) setSelected(ent);
@@ -497,8 +513,8 @@ function registerDefaultChar(name, b64, persist) {
 function updateCharModelHint() {
   const el = $('charModelHint');
   if (el) el.textContent = defaultChar
-    ? `Modelo actual: ${defaultChar.name} (con poses retargeteadas a su esqueleto)`
-    : 'Sin GLB cargado: «+ Personaje» crea maniquíes. Usa «Cambiar modelo» para usar tu personaje.';
+    ? t('Modelo actual: {n} (con poses retargeteadas a su esqueleto)', { n: defaultChar.name })
+    : t('Sin GLB cargado: «+ Personaje» crea maniquíes. Usa «Cambiar modelo» para usar tu personaje.');
 }
 async function tryLoadDefaultChar() {
   try {
@@ -506,7 +522,7 @@ async function tryLoadDefaultChar() {
     if (saved && saved.b64) { registerDefaultChar(saved.name, saved.b64, false); return; }
   } catch {}
   try {
-    const resp = await fetch('exported-model.glb');
+    const resp = await fetch('Slate/exported-model.glb');
     if (resp.ok) {
       registerDefaultChar('exported-model', bufToB64(await resp.arrayBuffer()), true);
       return;
@@ -804,8 +820,10 @@ function addProp(type, opts = {}) {
   const count = R.props.filter(p => p.type === type).length + 1;
   const ent = {
     kind: 'prop', id, type,
-    name: opts.name || `${def.label.replace(/^[^ ]+ /, '')} ${count}`,
-    colorHex: color, root: gr, marker, light, ringScale: def.ring
+    name: opts.name || `${t(def.label).replace(/^[^ ]+ /, '')} ${count}`,
+    colorHex: color, root: gr, marker, light, ringScale: def.ring,
+    path: opts.path ? JSON.parse(JSON.stringify(opts.path)) : { interpolation: 'catmullrom', keyframes: [] },
+    pathViz: null
   };
   if (light) ent.lightParams = opts.lightParams || { color, intensity: 40, distance: 0 };
   if (ent.lightParams && light) {
@@ -819,6 +837,7 @@ function addProp(type, opts = {}) {
   tagEnt(gr, id);
   scene.add(gr);
   R.props.push(ent);
+  updatePathViz(ent);
   renderPropList();
   if (!opts.noSelect) setSelected(ent);
   return ent;
@@ -839,7 +858,7 @@ $('fileGlb').addEventListener('change', async e => {
     if (glbTarget === 'character') {
       registerDefaultChar(name, bufToB64(buf), true);
       addCharacterAuto({ noUndo: true, name });
-      toast(`"${name}" es ahora tu modelo de personaje por defecto`);
+      toast(t('"{n}" es ahora tu modelo de personaje por defecto', { n: name }));
     } else {
       const assetId = uid('asset');
       R.assets[assetId] = { name: f.name, b64: bufToB64(buf) };
@@ -869,19 +888,21 @@ function instantiateGlb(assetId, kind, data, select) {
     model.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
     const id = data.id || uid(kind === 'character' ? 'char' : 'prop');
     let ent;
+    const entPath = data.path ? JSON.parse(JSON.stringify(data.path)) : { interpolation: 'catmullrom', keyframes: [] };
     if (kind === 'character') {
       const rig = missing ? null : buildRig(model, wrap);
       ent = { kind: 'character', charKind: 'glb', id, assetId, name: data.name || 'Personaje GLB',
         role: data.role || '', emotion: data.emotion || '', notes: data.notes || '',
         colorHex: data.color || null, root: wrap, joints: null, rig,
-        tintOnly: !!data.tintOnly, curPose: { j: {}, hipsOffset: 0 }, poseName: rig ? 'De pie' : null, ringScale: 1 };
+        tintOnly: !!data.tintOnly, curPose: { j: {}, hipsOffset: 0 }, poseName: rig ? 'De pie' : null, ringScale: 1,
+        path: entPath, pathViz: null };
       const bb = new THREE.Box3().setFromObject(model);
       ent.labelY = missing ? 1.0 : (rig ? rig.height : Math.max(bb.max.y + 0.12, 0.6));
       if (rig) applyPose(ent, data.pose || getPose('De pie'), data.poseName || 'De pie');
       tintModel(wrap, data.color || null, ent.tintOnly);
     } else {
       ent = { kind: 'prop', id, type: 'glb', assetId, name: data.name || 'Prop GLB',
-        colorHex: '#8a8f98', root: wrap, ringScale: 1.2 };
+        colorHex: '#8a8f98', root: wrap, ringScale: 1.2, path: entPath, pathViz: null };
     }
     wrap.position.set(...(data.pos || [0, 0, 0]));
     if (data.rot) wrap.rotation.set(DEG(data.rot[0]), DEG(data.rot[1]), DEG(data.rot[2]));
@@ -889,6 +910,7 @@ function instantiateGlb(assetId, kind, data, select) {
     tagEnt(wrap, id);
     scene.add(wrap);
     (kind === 'character' ? R.characters : R.props).push(ent);
+    updatePathViz(ent);
     renderCharList(); renderPropList();
     if (select) setSelected(ent);
   };
@@ -950,7 +972,7 @@ function renderCharList() {
   for (const c of R.characters) {
     const d = document.createElement('div');
     d.className = 'item' + (selected === c ? ' active' : '');
-    d.innerHTML = `<span class="dot" style="background:${c.colorHex || '#8a8f98'}"></span><span class="nm">${escapeHtml(c.name)}</span><button class="x" title="Eliminar">x</button>`;
+    d.innerHTML = `<span class="dot" style="background:${c.colorHex || '#8a8f98'}"></span><span class="nm">${escapeHtml(c.name)}</span><button class="x" title="${t('Eliminar')}">x</button>`;
     d.onclick = () => setSelected(c);
     d.querySelector('.x').onclick = e => { e.stopPropagation(); deleteEnt(c); };
     el.appendChild(d);
@@ -961,7 +983,7 @@ function renderPropList() {
   for (const p of R.props) {
     const d = document.createElement('div');
     d.className = 'item' + (selected === p ? ' active' : '');
-    d.innerHTML = `<i class="ph ${propIcon(p.type)}"></i><span class="nm">${escapeHtml(p.name)}</span><button class="x" title="Eliminar">x</button>`;
+    d.innerHTML = `<i class="ph ${propIcon(p.type)}"></i><span class="nm">${escapeHtml(p.name)}</span><button class="x" title="${t('Eliminar')}">x</button>`;
     d.onclick = () => setSelected(p);
     d.querySelector('.x').onclick = e => { e.stopPropagation(); deleteEnt(p); };
     el.appendChild(d);
@@ -973,19 +995,19 @@ function transformBlockHTML(ent) {
   const p = ent.root.position, r = eDeg(ent.root.rotation), s = ent.root.scale;
   const showScale = ent.kind !== 'camera';
   return `
-  <div class="lbl">Posición</div>
+  <div class="lbl">${t('Posición')}</div>
   <div class="grid3">
     <input type="number" step="0.1" id="tPx" value="${p.x.toFixed(2)}">
     <input type="number" step="0.1" id="tPy" value="${p.y.toFixed(2)}">
     <input type="number" step="0.1" id="tPz" value="${p.z.toFixed(2)}">
   </div>
-  <div class="lbl">Rotación (°)</div>
+  <div class="lbl">${t('Rotación (°)')}</div>
   <div class="grid3">
     <input type="number" step="5" id="tRx" value="${r[0]}">
     <input type="number" step="5" id="tRy" value="${r[1]}">
     <input type="number" step="5" id="tRz" value="${r[2]}">
   </div>
-  ${showScale ? `<div class="lbl">Escala</div><input type="number" step="0.05" min="0.05" id="tS" value="${s.x.toFixed(2)}">` : ''}`;
+  ${showScale ? `<div class="lbl">${t('Escala')}</div><input type="number" step="0.05" min="0.05" id="tS" value="${s.x.toFixed(2)}">` : ''}`;
 }
 function bindTransformInputs(ent) {
   const apply = () => {
@@ -1017,13 +1039,13 @@ function availableJointKeys(ent) {
 }
 function poseBlockHTML(ent) {
   const opts = allPoseNames().map(n =>
-    `<option ${n === ent.poseName ? 'selected' : ''}>${escapeHtml(n)}</option>`).join('');
-  const jopts = availableJointKeys(ent).map(k => `<option value="${k}">${JOINT_LABELS[k]}</option>`).join('');
+    `<option value="${escapeHtml(n)}" ${n === ent.poseName ? 'selected' : ''}>${escapeHtml(t(n))}</option>`).join('');
+  const jopts = availableJointKeys(ent).map(k => `<option value="${k}">${t(JOINT_LABELS[k])}</option>`).join('');
   return `
-  <div class="lbl">Pose</div>
-  <select id="poseSel">${ent.poseName && !getPose(ent.poseName) ? `<option selected>${escapeHtml(ent.poseName)}</option>` : ''}${opts}</select>
-  <button id="btnSavePose" class="btn outline w100" style="margin-top:6px">Guardar pose actual como preset...</button>
-  <div class="lbl">Ajuste manual de articulación</div>
+  <div class="lbl">${t('Pose')}</div>
+  <select id="poseSel">${ent.poseName && !getPose(ent.poseName) ? `<option value="${escapeHtml(ent.poseName)}" selected>${escapeHtml(t(ent.poseName))}</option>` : ''}${opts}</select>
+  <button id="btnSavePose" class="btn outline w100" style="margin-top:6px">${t('Guardar pose actual como preset...')}</button>
+  <div class="lbl">${t('Ajuste manual de articulación')}</div>
   <select id="jointSel">${jopts}</select>
   <div class="row"><label style="width:12px">X</label><input type="range" id="jsX" min="-180" max="180" step="1"><span id="jsXv" class="hint" style="margin:0;width:36px;text-align:right"></span></div>
   <div class="row"><label style="width:12px">Y</label><input type="range" id="jsY" min="-180" max="180" step="1"><span id="jsYv" class="hint" style="margin:0;width:36px;text-align:right"></span></div>
@@ -1063,15 +1085,15 @@ function bindPoseBlock(ent) {
     });
   });
   $('btnSavePose').onclick = () => {
-    openModal('Guardar pose', `
-      <div class="mrow"><label>Nombre del preset</label><input type="text" id="mPoseName" value="Pose ${Object.keys(customPoses).length + 1}"></div>
-      <div class="mrow"><button class="btn primary w100" id="mPoseOk">Guardar pose</button></div>`);
+    openModal(t('Guardar pose'), `
+      <div class="mrow"><label>${t('Nombre del preset')}</label><input type="text" id="mPoseName" value="Pose ${Object.keys(customPoses).length + 1}"></div>
+      <div class="mrow"><button class="btn primary w100" id="mPoseOk">${t('Guardar pose')}</button></div>`);
     $('mPoseOk').onclick = () => {
-      const n = $('mPoseName').value.trim() || 'Pose personalizada';
+      const n = $('mPoseName').value.trim() || t('Pose personalizada');
       saveCustomPose(n, currentPoseOf(ent));
       ent.poseName = n;
       closeModal(); renderInspector();
-      toast(`Pose "${n}" guardada en la biblioteca`);
+      toast(t('Pose "{n}" guardada en la biblioteca', { n }));
     };
   };
   refreshSliders();
@@ -1081,68 +1103,72 @@ function renderInspector() {
   const ent = selected;
   if (!ent) { $('rightPanel').classList.add('hidden'); return; }
   $('rightPanel').classList.remove('hidden');
-  $('inspTitle').textContent = { character: 'Personaje', prop: 'Prop', camera: 'Cámara' }[ent.kind];
-  let html = `<div class="lbl">Nombre</div><input type="text" id="inspName" value="${escapeHtml(ent.name)}">`;
+  $('inspTitle').textContent = { character: t('Personaje'), prop: t('Prop'), camera: t('Cámara') }[ent.kind];
+  let html = `<div class="lbl">${t('Nombre')}</div><input type="text" id="inspName" value="${escapeHtml(ent.name)}">`;
 
   if (ent.kind === 'character') {
     html += `
-    <div class="lbl">Rol narrativo</div><input type="text" id="inspRole" value="${escapeHtml(ent.role)}" placeholder="Protagonista, antagonista...">
-    <div class="lbl">Emoción / expresión</div><input type="text" id="inspEmotion" value="${escapeHtml(ent.emotion)}" placeholder="Tenso, alegre, sorprendido...">
-    <div class="lbl">Notas narrativas</div><textarea id="inspNotes" rows="2" placeholder="Qué hace en la escena...">${escapeHtml(ent.notes)}</textarea>`;
+    <div class="lbl">${t('Rol narrativo')}</div><input type="text" id="inspRole" value="${escapeHtml(ent.role)}" placeholder="${t('Protagonista, antagonista...')}">
+    <div class="lbl">${t('Emoción / expresión')}</div><input type="text" id="inspEmotion" value="${escapeHtml(ent.emotion)}" placeholder="${t('Tenso, alegre, sorprendido...')}">
+    <div class="lbl">${t('Notas narrativas')}</div><textarea id="inspNotes" rows="2" placeholder="${t('Qué hace en la escena...')}">${escapeHtml(ent.notes)}</textarea>`;
     // dirección del personaje (hacia dónde mira / se orienta)
     const faceTargets = [
-      ...R.cameras.map(c => `<option value="${c.id}">Cámara: ${escapeHtml(c.name)}</option>`),
-      ...R.characters.filter(c => c !== ent).map(c => `<option value="${c.id}">Personaje: ${escapeHtml(c.name)}</option>`),
-      ...R.props.filter(p => p.type !== 'luz').map(p => `<option value="${p.id}">Prop: ${escapeHtml(p.name)}</option>`)
+      ...R.cameras.map(c => `<option value="${c.id}">${t('Cámara')}: ${escapeHtml(c.name)}</option>`),
+      ...R.characters.filter(c => c !== ent).map(c => `<option value="${c.id}">${t('Personaje')}: ${escapeHtml(c.name)}</option>`),
+      ...R.props.filter(p => p.type !== 'luz').map(p => `<option value="${p.id}">${t('Prop')}: ${escapeHtml(p.name)}</option>`)
     ].join('');
     html += `
-    <div class="lbl">Dirección</div>
+    <div class="lbl">${t('Dirección')}</div>
     <div class="row" style="margin-top:2px">
-      <select id="inspFaceTarget" style="flex:1">${faceTargets || '<option value="">— sin objetivos —</option>'}</select>
-      <button class="btn outline" id="btnFace" title="Girar el personaje hacia el objetivo">Mirar</button>
+      <select id="inspFaceTarget" style="flex:1">${faceTargets || `<option value="">${t('— sin objetivos —')}</option>`}</select>
+      <button class="btn outline" id="btnFace" title="${t('Girar el personaje hacia el objetivo')}">${t('Mirar')}</button>
     </div>
     <div class="hint" id="inspFacingTxt">${escapeHtml(characterFacingInfo(ent, viewCam).text)}</div>`;
-    html += `<div class="lbl">Color${ent.charKind === 'glb' ? ' (tinte)' : ''}</div><div class="swatches">${
+    html += `<div class="lbl">${t('Color')}${ent.charKind === 'glb' ? ' ' + t('(tinte)') : ''}</div><div class="swatches">${
       (ent.charKind === 'glb' ? ['', ...CHAR_COLORS] : CHAR_COLORS).map(c => c === ''
-        ? `<span class="sw ${!ent.colorHex ? 'active' : ''}" data-c="" title="Colores originales del modelo" style="background:linear-gradient(135deg,#fff 44%,#c0392b 44%,#c0392b 56%,#fff 56%)"></span>`
+        ? `<span class="sw ${!ent.colorHex ? 'active' : ''}" data-c="" title="${t('Colores originales del modelo')}" style="background:linear-gradient(135deg,#fff 44%,#c0392b 44%,#c0392b 56%,#fff 56%)"></span>`
         : `<span class="sw ${c === ent.colorHex ? 'active' : ''}" data-c="${c}" style="background:${c}"></span>`).join('')}</div>`;
     if (ent.charKind === 'glb') html += `
-    <label class="ck tint-only-row"><input type="checkbox" id="inspTintOnly" ${ent.tintOnly ? 'checked' : ''}> Solo tinte, sin textura</label>
-    <div class="hint">Oculta los mapas del material del GLB y deja visible solo el color/tinte seleccionado.</div>`;
+    <label class="ck tint-only-row"><input type="checkbox" id="inspTintOnly" ${ent.tintOnly ? 'checked' : ''}> ${t('Solo tinte, sin textura')}</label>
+    <div class="hint">${t('Oculta los mapas del material del GLB y deja visible solo el color/tinte seleccionado.')}</div>`;
     if (ent.joints || ent.rig) html += poseBlockHTML(ent);
-    else html += `<div class="hint">Este GLB no tiene esqueleto compatible: puedes moverlo, rotarlo y escalarlo, pero sin poses.</div>`;
+    else html += `<div class="hint">${t('Este GLB no tiene esqueleto compatible: puedes moverlo, rotarlo y escalarlo, pero sin poses.')}</div>`;
   }
 
   if (ent.kind === 'prop') {
-    if (ent.type !== 'glb') html += `<div class="row"><label>Color</label><input type="color" id="inspColor" value="${ent.colorHex}"></div>`;
+    if (ent.type !== 'glb') html += `<div class="row"><label>${t('Color')}</label><input type="color" id="inspColor" value="${ent.colorHex}"></div>`;
     if (ent.light) {
       const lp = ent.lightParams;
       html += `
-      <div class="lbl">Luz puntual</div>
-      <div class="row"><label style="width:64px">Color</label><input type="color" id="lpColor" value="${lp.color}"></div>
-      <div class="row"><label style="width:64px">Intensidad</label><input type="range" id="lpInt" min="0" max="200" step="1" value="${lp.intensity}"></div>
-      <div class="row"><label style="width:64px">Alcance</label><input type="range" id="lpDist" min="0" max="30" step="0.5" value="${lp.distance}"></div>
-      <div class="hint">Alcance 0 = infinito.</div>`;
+      <div class="lbl">${t('Luz puntual')}</div>
+      <div class="row"><label style="width:64px">${t('Color')}</label><input type="color" id="lpColor" value="${lp.color}"></div>
+      <div class="row"><label style="width:64px">${t('Intensidad')}</label><input type="range" id="lpInt" min="0" max="200" step="1" value="${lp.intensity}"></div>
+      <div class="row"><label style="width:64px">${t('Alcance')}</label><input type="range" id="lpDist" min="0" max="30" step="0.5" value="${lp.distance}"></div>
+      <div class="hint">${t('Alcance 0 = infinito.')}</div>`;
     }
   }
 
   if (ent.kind === 'camera') {
     html += `
     <div class="row"><label>FOV</label><input type="range" id="inspFov" min="15" max="110" step="1" value="${ent.cam.fov}"><span id="inspFovV" class="hint" style="margin:0;width:34px;text-align:right">${Math.round(ent.cam.fov)}°</span></div>
-    <div class="lbl">Tipo de plano</div>
-    <select id="inspShotType">${SHOT_TYPES.map(t => `<option ${t === ent.shotType ? 'selected' : ''}>${t}</option>`).join('')}</select>
+    <div class="lbl">${t('Tipo de plano')}</div>
+    <select id="inspShotType">${SHOT_TYPES.map(st => `<option value="${escapeHtml(st)}" ${st === ent.shotType ? 'selected' : ''}>${escapeHtml(t(st))}</option>`).join('')}</select>
     <div class="grid2">
-      <button class="btn outline" id="btnCamView">Ver por cámara</button>
-      <button class="btn outline" id="btnCamFree">Vista libre</button>
-      <button class="btn outline" id="btnCamCap">Capturar</button>
-      <button class="btn outline" id="btnCamPath">Trayectoria</button>
+      <button class="btn outline" id="btnCamView">${t('Ver por cámara')}</button>
+      <button class="btn outline" id="btnCamFree">${t('Vista libre')}</button>
+      <button class="btn outline" id="btnCamCap">${t('Capturar')}</button>
+      <button class="btn outline" id="btnCamPath">${t('Trayectoria')}</button>
     </div>`;
   }
 
   html += transformBlockHTML(ent);
+  if (ent.kind !== 'camera') {
+    const nk = ent.path ? ent.path.keyframes.length : 0;
+    html += `<button class="btn outline w100" id="btnEntPath" style="margin-top:12px"><i class="ph ph-path"></i> ${t('Trayectoria')}${nk ? ` · ${nk} kf` : ''}</button>`;
+  }
   html += `<div class="grid2" style="margin-top:12px">
-    <button class="btn outline" id="btnDup">Duplicar</button>
-    <button class="btn outline danger" id="btnDel">Eliminar</button>
+    <button class="btn outline" id="btnDup">${t('Duplicar')}</button>
+    <button class="btn outline danger" id="btnDel">${t('Eliminar')}</button>
   </div>`;
   $('inspector').innerHTML = html;
 
@@ -1154,6 +1180,8 @@ function renderInspector() {
   bindTransformInputs(ent);
   $('btnDup').onclick = () => duplicateEnt(ent);
   $('btnDel').onclick = () => deleteEnt(ent);
+  const bp = $('btnEntPath');
+  if (bp) bp.onclick = () => openTimeline(ent);
 
   if (ent.kind === 'character') {
     $('inspRole').addEventListener('change', e => ent.role = e.target.value);
@@ -1169,7 +1197,7 @@ function renderInspector() {
       syncInspectorFromSel();
       const ft = $('inspFacingTxt');
       if (ft) ft.textContent = characterFacingInfo(ent, viewCam).text;
-      toast(`${ent.name} ahora mira hacia ${target.name}`);
+      toast(t('{a} ahora mira hacia {b}', { a: ent.name, b: target.name }));
     };
     document.querySelectorAll('#inspector .sw').forEach(sw => sw.onclick = () => {
       pushUndo();
@@ -1235,34 +1263,44 @@ function deleteEnt(ent, noUndo) {
   if (ent.kind === 'camera') removeCameraEnt(ent);
   else {
     scene.remove(ent.root); disposeObject(ent.root);
+    if (ent.pathViz) { scene.remove(ent.pathViz); disposeObject(ent.pathViz); ent.pathViz = null; }
     const arr = ent.kind === 'character' ? R.characters : R.props;
     const i = arr.indexOf(ent); if (i >= 0) arr.splice(i, 1);
+    if (tlEnt === ent) { tlEnt = null; refreshKfs(); }
   }
   renderCharList(); renderPropList(); renderPersp(); refreshTlCams(); refreshPipSelect();
 }
 function duplicateEnt(ent) {
   pushUndo();
   const off = new THREE.Vector3(0.7, 0, 0);
+  // copia de la trayectoria con el mismo desplazamiento lateral que la entidad
+  const pathCopy = () => {
+    if (!ent.path || !ent.path.keyframes.length) return undefined;
+    const p = JSON.parse(JSON.stringify(ent.path));
+    for (const k of p.keyframes) k.pos[0] += off.x;
+    return p;
+  };
   if (ent.kind === 'character') {
     if (ent.charKind === 'mannequin') {
-      const n = addMannequin({ noUndo: true, color: ent.colorHex, name: ent.name + ' copia', role: ent.role,
-        emotion: ent.emotion, notes: ent.notes, pos: ent.root.position.clone().add(off) });
+      const n = addMannequin({ noUndo: true, color: ent.colorHex, name: ent.name + ' ' + t('copia'), role: ent.role,
+        emotion: ent.emotion, notes: ent.notes, pos: ent.root.position.clone().add(off), path: pathCopy() });
       n.root.rotation.copy(ent.root.rotation); n.root.scale.copy(ent.root.scale);
       applyPose(n, currentPoseOf(ent), ent.poseName);
       renderInspector();
     } else {
-      instantiateGlb(ent.assetId, 'character', { name: ent.name + ' copia', role: ent.role, notes: ent.notes,
+      instantiateGlb(ent.assetId, 'character', { name: ent.name + ' ' + t('copia'), role: ent.role, notes: ent.notes,
         emotion: ent.emotion, color: ent.colorHex, tintOnly: ent.tintOnly,
-        pose: currentPoseOf(ent), poseName: ent.poseName,
+        pose: currentPoseOf(ent), poseName: ent.poseName, path: pathCopy(),
         pos: v3(ent.root.position.clone().add(off)), rot: eDeg(ent.root.rotation), scale: v3(ent.root.scale) }, true);
     }
   } else if (ent.kind === 'prop') {
     if (ent.type === 'glb') {
-      instantiateGlb(ent.assetId, 'prop', { name: ent.name + ' copia',
+      instantiateGlb(ent.assetId, 'prop', { name: ent.name + ' ' + t('copia'), path: pathCopy(),
         pos: v3(ent.root.position.clone().add(off)), rot: eDeg(ent.root.rotation), scale: v3(ent.root.scale) }, true);
     } else {
-      const n = addProp(ent.type, { noUndo: true, color: ent.colorHex, name: ent.name + ' copia',
-        pos: ent.root.position.clone().add(off), lightParams: ent.lightParams ? { ...ent.lightParams } : undefined });
+      const n = addProp(ent.type, { noUndo: true, color: ent.colorHex, name: ent.name + ' ' + t('copia'),
+        pos: ent.root.position.clone().add(off), path: pathCopy(),
+        lightParams: ent.lightParams ? { ...ent.lightParams } : undefined });
       n.root.rotation.copy(ent.root.rotation); n.root.scale.copy(ent.root.scale);
     }
   } else if (ent.kind === 'camera') {
@@ -1308,21 +1346,63 @@ function updateFrustumViz(ent) {
   ent.frustum = line;
 }
 
+// ---------- modelo 3D de la cámara (Slate/camera.glb, tinte negro sin textura) ----------
+let cameraTemplate = null;         // THREE.Group ya tintado y normalizado, listo para clonar
+const CAMERA_MODEL_YAW = Math.PI;  // giro para que el objetivo del modelo apunte a -Z (dirección de vista)
+async function loadCameraModel() {
+  let buf;
+  try {
+    const resp = await fetch('Slate/camera.glb');
+    if (!resp.ok) return;
+    buf = await resp.arrayBuffer();
+  } catch { return; }
+  await new Promise(res => {
+    new GLTFLoader().parse(buf, '', g => {
+      const model = g.scene;
+      // material negro mate único: cumple "tinte negro sin textura"
+      const blackMat = new THREE.MeshStandardMaterial({ color: 0x111318, roughness: 0.55, metalness: 0.35 });
+      model.traverse(o => { if (o.isMesh) { o.material = blackMat; o.castShadow = false; o.receiveShadow = false; } });
+      // normaliza a un tamaño parecido al gizmo anterior y centra en el origen de la cámara
+      const wrap = new THREE.Group();
+      wrap.add(model);
+      let bb = new THREE.Box3().setFromObject(model);
+      const size = bb.getSize(new THREE.Vector3());
+      const maxD = Math.max(size.x, size.y, size.z) || 1;
+      model.scale.setScalar(0.55 / maxD);
+      bb = new THREE.Box3().setFromObject(model);
+      model.position.sub(bb.getCenter(new THREE.Vector3()));
+      wrap.rotation.y = CAMERA_MODEL_YAW;
+      cameraTemplate = wrap;
+      res();
+    }, err => { console.error(err); res(); });
+  });
+}
+// construye la representación visible de una cámara: el modelo GLB si está cargado,
+// o el gizmo de caja+cono como respaldo (p. ej. si el GLB no se pudo leer)
+function buildCameraViz() {
+  const viz = new THREE.Group();
+  if (cameraTemplate) {
+    viz.add(cameraTemplate.clone(true));
+  } else {
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0x2a2c33, roughness: 0.5, metalness: 0.2 });
+    const box = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.18, 0.3), bodyMat);
+    const lens = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.16, 20, 1, true), bodyMat);
+    lens.rotation.x = -Math.PI / 2; lens.position.z = -0.22;
+    viz.add(box, lens);
+  }
+  return viz;
+}
+
 function addCamera(opts = {}) {
   if (!opts.noUndo) pushUndo();
   const cam = new THREE.PerspectiveCamera(opts.fov || 40, 16 / 9, 0.1, 600);
   const id = opts.id || uid('cam');
-  const viz = new THREE.Group();
-  const bodyMat = new THREE.MeshStandardMaterial({ color: 0x2a2c33, roughness: 0.5, metalness: 0.2 });
-  const box = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.18, 0.3), bodyMat);
-  const lens = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.16, 20, 1, true), bodyMat);
-  lens.rotation.x = -Math.PI / 2; lens.position.z = -0.22;
-  viz.add(box, lens);
+  const viz = buildCameraViz();
   cam.add(viz);
   scene.add(cam);
   const ent = {
     kind: 'camera', id, cam, viz, frustum: null,
-    name: opts.name || `Cámara ${++camCounter}`,
+    name: opts.name || `${t('Cámara')} ${++camCounter}`,
     shotType: opts.shotType || 'Plano general',
     path: opts.path || { interpolation: 'catmullrom', keyframes: [] },
     pathViz: null, ringScale: 0.7, root: cam
@@ -1344,7 +1424,7 @@ function addCamera(opts = {}) {
   return ent;
 }
 function duplicateCamera(ent) {
-  const n = addCamera({ noUndo: true, name: ent.name + ' copia', fov: ent.cam.fov, shotType: ent.shotType,
+  const n = addCamera({ noUndo: true, name: ent.name + ' ' + t('copia'), fov: ent.cam.fov, shotType: ent.shotType,
     pos: v3(ent.cam.position), rot: eDeg(ent.cam.rotation),
     path: JSON.parse(JSON.stringify(ent.path)) });
   updatePathViz(n);
@@ -1386,13 +1466,13 @@ function renderPersp() {
   const el = $('perspList'); el.innerHTML = '';
   const free = document.createElement('div');
   free.className = 'item' + (viewCam === freeCam ? ' active' : '');
-  free.innerHTML = `<i class="ph ph-globe-simple"></i><span class="nm">Vista libre (Director)</span>`;
+  free.innerHTML = `<i class="ph ph-globe-simple"></i><span class="nm">${t('Vista libre (Director)')}</span>`;
   free.onclick = () => setViewCamera(null);
   el.appendChild(free);
   for (const c of R.cameras) {
     const d = document.createElement('div');
     d.className = 'item' + (viewCam === c.cam ? ' active' : (selected === c ? ' active' : ''));
-    d.innerHTML = `<i class="ph ph-video-camera"></i><span class="nm">${escapeHtml(c.name)}</span><button class="x" title="Eliminar cámara">x</button>`;
+    d.innerHTML = `<i class="ph ph-video-camera"></i><span class="nm">${escapeHtml(c.name)}</span><button class="x" title="${t('Eliminar cámara')}">x</button>`;
     d.onclick = () => { setViewCamera(c); setSelected(c); };
     d.querySelector('.x').onclick = e => { e.stopPropagation(); deleteEnt(c); };
     el.appendChild(d);
@@ -1400,7 +1480,7 @@ function renderPersp() {
 }
 $('btnAddCam').onclick = () => {
   const ent = addCamera({});
-  toast(`"${ent.name}" creada desde la vista actual`);
+  toast(t('"{n}" creada desde la vista actual', { n: ent.name }));
 };
 
 // ---------- preview final (PiP) ----------
@@ -1408,7 +1488,7 @@ function setPipEnt(ent) { pipEnt = ent; refreshPipSelect(); }
 function refreshPipSelect() {
   const sel = $('pipSelect');
   sel.innerHTML = R.cameras.map(c => `<option value="${c.id}" ${pipEnt === c ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('');
-  if (!R.cameras.length) sel.innerHTML = '<option value="">-- sin camaras --</option>';
+  if (!R.cameras.length) sel.innerHTML = `<option value="">${t('-- sin camaras --')}</option>`;
 }
 $('pipSelect').addEventListener('change', e => {
   pipEnt = R.cameras.find(c => c.id === e.target.value) || null;
@@ -1476,33 +1556,48 @@ function samplePath(ent, t) {
   const fov = (k0.fov ?? 40) + ((k1.fov ?? 40) - (k0.fov ?? 40)) * ue;
   return { pos, quat, fov };
 }
-function applyPathAt(ent, t) {
-  const s = samplePath(ent, t);
+function applyPathAt(ent, time) {
+  const s = samplePath(ent, time);
   if (!s) return;
-  ent.cam.position.copy(s.pos);
-  ent.cam.quaternion.copy(s.quat);
-  if (Math.abs(ent.cam.fov - s.fov) > 0.05) {
-    ent.cam.fov = s.fov; ent.cam.updateProjectionMatrix(); updateFrustumViz(ent);
+  if (ent.kind === 'camera') {
+    ent.cam.position.copy(s.pos);
+    ent.cam.quaternion.copy(s.quat);
+    if (Math.abs(ent.cam.fov - s.fov) > 0.05) {
+      ent.cam.fov = s.fov; ent.cam.updateProjectionMatrix(); updateFrustumViz(ent);
+    }
+  } else {
+    ent.root.position.copy(s.pos);
+    ent.root.quaternion.copy(s.quat);
   }
 }
+// todas las entidades animables (cámaras, personajes y props con ≥2 keyframes)
+function animEnts() {
+  return [...R.cameras, ...R.characters, ...R.props].filter(e => e.path && e.path.keyframes.length >= 2);
+}
+function globalDuration() {
+  return animEnts().reduce((m, e) => Math.max(m, pathDuration(e)), 0);
+}
+function applyAllPaths(time) { for (const e of animEnts()) applyPathAt(e, time); }
 
-// línea punteada de la trayectoria en la escena
+// línea punteada de la trayectoria en la escena (azul cámaras, ámbar objetos)
 function updatePathViz(ent) {
   if (ent.pathViz) { scene.remove(ent.pathViz); disposeObject(ent.pathViz); ent.pathViz = null; }
+  if (!ent.path) return;
   const kfs = ent.path.keyframes;
   if (kfs.length < 2) return;
+  const color = ent.kind === 'camera' ? 0x3a6df0 : 0xdd8422;
   const g = new THREE.Group();
   const pts = kfs.map(k => new THREE.Vector3(...k.pos));
   const linePts = (ent.path.interpolation === 'catmullrom' && pts.length > 2)
     ? new THREE.CatmullRomCurve3(pts).getPoints(140) : pts;
   const line = new THREE.Line(
     new THREE.BufferGeometry().setFromPoints(linePts),
-    new THREE.LineDashedMaterial({ color: 0x3a6df0, dashSize: 0.15, gapSize: 0.1, transparent: true, opacity: 0.9 })
+    new THREE.LineDashedMaterial({ color, dashSize: 0.15, gapSize: 0.1, transparent: true, opacity: 0.9 })
   );
   line.computeLineDistances();
   g.add(line);
   const sphGeo = new THREE.SphereGeometry(0.055, 10, 8);
-  const sphMat = new THREE.MeshBasicMaterial({ color: 0x3a6df0 });
+  const sphMat = new THREE.MeshBasicMaterial({ color });
   for (const p of pts) { const s = new THREE.Mesh(sphGeo, sphMat); s.position.copy(p); g.add(s); }
   g.traverse(o => o.userData.noPick = true);
   scene.add(g);
@@ -1510,36 +1605,52 @@ function updatePathViz(ent) {
 }
 
 // ---------- interfaz del timeline ----------
-$('tlInterp').innerHTML = INTERPS.map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
+function buildInterpOptions() {
+  const cur = $('tlInterp').value;
+  $('tlInterp').innerHTML = INTERPS.map(([v, l]) => `<option value="${v}">${t(l)}</option>`).join('');
+  if (cur) $('tlInterp').value = cur;
+}
+buildInterpOptions();
 
 function openTimeline(ent) {
-  tlEnt = ent || activeCamEnt || (selected && selected.kind === 'camera' ? selected : null) || R.cameras[0] || null;
+  tlEnt = ent || (selected || null) || activeCamEnt || R.cameras[0] || null;
   $('timelinePanel').classList.remove('hidden');
   refreshTlCams(); refreshKfs();
-  if (!tlEnt) toast('Crea primero una cámara para animarla');
+  if (!tlEnt) toast('Crea primero una cámara, personaje o prop para animarlo');
 }
 function refreshTlCams() {
-  if (!tlEnt && R.cameras.length) tlEnt = R.cameras[0];
-  $('tlCam').innerHTML = R.cameras.map(c =>
-    `<option value="${c.id}" ${tlEnt === c ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('') ||
-    '<option value="">-- sin camaras --</option>';
+  if (!tlEnt) tlEnt = R.cameras[0] || null;
+  const groups = [
+    [t('Cámaras'), R.cameras], [t('Personajes'), R.characters], [t('Props'), R.props]
+  ];
+  let html = '';
+  for (const [label, arr] of groups) {
+    if (!arr.length) continue;
+    html += `<optgroup label="${escapeHtml(label)}">` + arr.map(e =>
+      `<option value="${e.id}" ${tlEnt === e ? 'selected' : ''}>${escapeHtml(e.name)}</option>`).join('') + '</optgroup>';
+  }
+  $('tlCam').innerHTML = html || `<option value="">${t('-- sin camaras --')}</option>`;
 }
-function updateScrubMax() { $('tlScrub').max = Math.max(tlEnt ? pathDuration(tlEnt) : 0, 1); }
+function updateScrubMax() { $('tlScrub').max = Math.max(globalDuration(), 1); }
 function tlTimeLabel() {
-  $('tlTime').textContent = `${PB.t.toFixed(1)} / ${(tlEnt ? pathDuration(tlEnt) : 0).toFixed(1)} s`;
+  $('tlTime').textContent = `${PB.t.toFixed(1)} / ${globalDuration().toFixed(1)} s`;
 }
 function refreshKfs() {
   const el = $('tlKfs'); el.innerHTML = '';
-  if (!tlEnt) { el.innerHTML = '<span class="hint" style="margin:0">Sin cámara seleccionada.</span>'; updateScrubMax(); tlTimeLabel(); return; }
+  if (!tlEnt) { el.innerHTML = `<span class="hint" style="margin:0">${t('Sin entidad seleccionada.')}</span>`; updateScrubMax(); tlTimeLabel(); return; }
+  if (!tlEnt.path) tlEnt.path = { interpolation: 'catmullrom', keyframes: [] };
   $('tlInterp').value = tlEnt.path.interpolation;
+  $('tlKfHint').textContent = tlEnt.kind === 'camera'
+    ? t('Cada keyframe guarda posición, rotación y FOV de la cámara.')
+    : t('Cada keyframe guarda posición y rotación del objeto.');
   if (!tlEnt.path.keyframes.length)
-    el.innerHTML = '<span class="hint" style="margin:0">Sin keyframes: mueve la cámara y pulsa + Keyframe aquí.</span>';
+    el.innerHTML = `<span class="hint" style="margin:0">${t('Sin keyframes: mueve la entidad seleccionada y pulsa + Keyframe aquí.')}</span>`;
   tlEnt.path.keyframes.forEach((kf, idx) => {
     const chip = document.createElement('span');
     chip.className = 'kfchip';
-    chip.innerHTML = `${kf.time.toFixed(1)}s <button class="x" title="Eliminar keyframe">x</button>`;
-    chip.title = 'Ir a este keyframe';
-    chip.onclick = () => { PB.t = kf.time; applyPathAt(tlEnt, kf.time); $('tlScrub').value = kf.time; tlTimeLabel(); };
+    chip.innerHTML = `${kf.time.toFixed(1)}s <button class="x" title="${t('Eliminar keyframe')}">x</button>`;
+    chip.title = t('Ir a este keyframe');
+    chip.onclick = () => { PB.t = kf.time; applyAllPaths(kf.time); $('tlScrub').value = kf.time; tlTimeLabel(); };
     chip.querySelector('.x').onclick = e => {
       e.stopPropagation(); pushUndo();
       tlEnt.path.keyframes.splice(idx, 1);
@@ -1556,7 +1667,7 @@ $('btnTimeline').onclick = () => {
 $('tlClose').onclick = () => { stopPB(); $('timelinePanel').classList.add('hidden'); };
 $('tlCam').addEventListener('change', e => {
   stopPB();
-  tlEnt = R.cameras.find(c => c.id === e.target.value) || null;
+  tlEnt = findEnt(e.target.value);
   PB.t = 0; $('tlScrub').value = 0;
   refreshKfs();
 });
@@ -1567,21 +1678,24 @@ $('tlInterp').addEventListener('change', e => {
   updatePathViz(tlEnt);
 });
 $('tlAddKf').onclick = () => {
-  if (!tlEnt) { toast('Selecciona una cámara en el timeline'); return; }
+  if (!tlEnt) { toast('Selecciona una entidad en el timeline'); return; }
   pushUndo();
-  const t = Math.max(0, +$('tlKfTime').value || 0);
-  const kf = { time: t, pos: v3(tlEnt.cam.position), rot: eDeg(tlEnt.cam.rotation), fov: +tlEnt.cam.fov.toFixed(1) };
+  if (!tlEnt.path) tlEnt.path = { interpolation: 'catmullrom', keyframes: [] };
+  const tk = Math.max(0, +$('tlKfTime').value || 0);
+  const src = tlEnt.kind === 'camera' ? tlEnt.cam : tlEnt.root;
+  const kf = { time: tk, pos: v3(src.position), rot: eDeg(src.rotation) };
+  if (tlEnt.kind === 'camera') kf.fov = +tlEnt.cam.fov.toFixed(1);
   const kfs = tlEnt.path.keyframes;
-  const existing = kfs.findIndex(k => Math.abs(k.time - t) < 0.01);
+  const existing = kfs.findIndex(k => Math.abs(k.time - tk) < 0.01);
   if (existing >= 0) kfs[existing] = kf; else { kfs.push(kf); kfs.sort((a, b) => a.time - b.time); }
-  $('tlKfTime').value = (t + 2).toFixed(1);
+  $('tlKfTime').value = (tk + 2).toFixed(1);
   refreshKfs(); updatePathViz(tlEnt);
-  toast(`Keyframe en t=${t.toFixed(1)}s ${existing >= 0 ? 'actualizado' : 'añadido'}`);
+  toast(t(existing >= 0 ? 'Keyframe en t={t}s actualizado' : 'Keyframe en t={t}s añadido', { t: tk.toFixed(1) }));
 };
 $('tlScrub').addEventListener('input', e => {
   stopPB();
   PB.t = +e.target.value;
-  if (tlEnt) applyPathAt(tlEnt, PB.t);
+  applyAllPaths(PB.t);
   tlTimeLabel();
 });
 function stopPB() {
@@ -1591,32 +1705,104 @@ function stopPB() {
 }
 $('tlPlay').onclick = () => {
   if (PB.playing) { stopPB(); return; }
-  if (!tlEnt || tlEnt.path.keyframes.length < 2) { toast('Necesitas al menos 2 keyframes para reproducir'); return; }
-  if (PB.t >= pathDuration(tlEnt) - 0.01) PB.t = 0;
+  if (!animEnts().length) { toast('Necesitas al menos 2 keyframes para reproducir'); return; }
+  if (PB.t >= globalDuration() - 0.01) PB.t = 0;
   PB.playing = true;
   $('tlPlay').innerHTML = '<i class="ph ph-pause"></i>';
-  setPipEnt(tlEnt);
-  if (viewCam === tlEnt.cam) controls.enabled = false;
+  if (tlEnt && tlEnt.kind === 'camera') {
+    setPipEnt(tlEnt);
+    if (viewCam === tlEnt.cam) controls.enabled = false;
+  }
 };
 $('tlStop').onclick = () => {
   stopPB(); PB.t = 0; $('tlScrub').value = 0;
-  if (tlEnt) applyPathAt(tlEnt, 0);
+  applyAllPaths(0);
   tlTimeLabel();
 };
-$('tlCap').onclick = () => { if (tlEnt) captureFrame(tlEnt); };
+$('tlCap').onclick = () => { captureFrame(tlEnt && tlEnt.kind === 'camera' ? tlEnt : activeCamEnt); };
+$('tlVideo').onclick = () => exportVideo();
 
 function tickPlayback(dt) {
-  if (!PB.playing || !tlEnt) return;
+  if (!PB.playing) return;
   PB.t += dt;
-  const dur = pathDuration(tlEnt);
+  const dur = globalDuration();
   if (PB.t >= dur) {
     if ($('tlLoop').checked) PB.t = dur > 0 ? PB.t % dur : 0;
     else { PB.t = dur; stopPB(); }
   }
-  applyPathAt(tlEnt, PB.t);
+  applyAllPaths(PB.t);
   $('tlScrub').value = PB.t;
   tlTimeLabel();
 }
+
+/* ---------- exportación de video (WebM) ---------- */
+let vidState = null;
+function exportVideo() {
+  if (vidState) return;
+  const camEnt = (tlEnt && tlEnt.kind === 'camera') ? tlEnt : (pipEnt || R.cameras[0]);
+  if (!camEnt) { toast('Crea una camara primero'); return; }
+  const dur = globalDuration();
+  if (dur < 0.1) { toast('Necesitas al menos 2 keyframes para reproducir'); return; }
+  if (typeof MediaRecorder === 'undefined' || !capCanvas.captureStream) {
+    toast('Tu navegador no soporta la grabación de video (MediaRecorder)'); return;
+  }
+  stopPB();
+  const mime = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']
+    .find(m => MediaRecorder.isTypeSupported(m)) || '';
+  const stream = capCanvas.captureStream(60);
+  const rec = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: 14000000 } : undefined);
+  const chunks = [];
+  rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+  // estado previo de todo lo animado, para restaurarlo al terminar
+  const saved = [];
+  for (const e of new Set([...animEnts(), camEnt])) {
+    const o = e.kind === 'camera' ? e.cam : e.root;
+    saved.push({ e, o, pos: o.position.clone(), quat: o.quaternion.clone(), fov: e.kind === 'camera' ? e.cam.fov : null });
+  }
+  const restore = () => {
+    for (const s of saved) {
+      s.o.position.copy(s.pos); s.o.quaternion.copy(s.quat);
+      if (s.fov !== null && Math.abs(s.e.cam.fov - s.fov) > 0.01) {
+        s.e.cam.fov = s.fov; s.e.cam.updateProjectionMatrix(); updateFrustumViz(s.e);
+      }
+    }
+  };
+  $('vidOverlay').classList.remove('hidden');
+  $('vidFill').style.width = '0%';
+  $('vidInfo').textContent = `${camEnt.name} · 0.0 / ${dur.toFixed(1)} s`;
+  vidState = { cancel: false };
+  rec.onstop = () => {
+    $('vidOverlay').classList.add('hidden');
+    restore();
+    const cancelled = vidState && vidState.cancel;
+    vidState = null;
+    if (cancelled) { toast('Exportación de video cancelada'); return; }
+    const blob = new Blob(chunks, { type: mime || 'video/webm' });
+    const url = URL.createObjectURL(blob);
+    download(`${sanitize(sceneName)}_${sanitize(camEnt.name)}.webm`, url);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    toast(t('Video exportado ({s} s, 1600x900 WebM)', { s: dur.toFixed(1) }));
+  };
+  rec.start(200);
+  const t0 = performance.now();
+  const frame = () => {
+    if (!vidState) return;
+    const tt = (performance.now() - t0) / 1000;
+    if (vidState.cancel || tt >= dur) {
+      applyAllPaths(dur);
+      cleanRender(capRenderer, camEnt.cam, 16, 9);
+      rec.stop();
+      return;
+    }
+    applyAllPaths(tt);
+    cleanRender(capRenderer, camEnt.cam, 16, 9);
+    $('vidFill').style.width = (tt / dur * 100).toFixed(1) + '%';
+    $('vidInfo').textContent = `${camEnt.name} · ${tt.toFixed(1)} / ${dur.toFixed(1)} s`;
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+}
+$('vidCancel').onclick = () => { if (vidState) vidState.cancel = true; };
 
 /* ============================================================
    CAPTURAS Y TOMAS - fotogramas, galería, prompts para IA
@@ -1638,17 +1824,17 @@ function renderToCapCanvas(camEnt) {
   return cam;
 }
 function camDisplayName(camEnt) {
-  return camEnt ? camEnt.name : (activeCamEnt ? activeCamEnt.name : 'Vista libre');
+  return camEnt ? camEnt.name : (activeCamEnt ? activeCamEnt.name : t('Vista libre'));
 }
 function captureFrame(camEnt) {
   renderToCapCanvas(camEnt);
   const url = capCanvas.toDataURL('image/jpeg', 0.92);
   R.captures.unshift({
-    id: uid('cap'), name: `Captura ${String(++capCounter).padStart(2, '0')}`,
+    id: uid('cap'), name: `${t('Captura')} ${String(++capCounter).padStart(2, '0')}`,
     cam: camDisplayName(camEnt), url, date: new Date().toISOString()
   });
   renderCaps();
-  toast(`${camDisplayName(camEnt)} - captura guardada`);
+  toast(t('{n} - captura guardada', { n: camDisplayName(camEnt) }));
 }
 $('btnCapture').onclick = () => captureFrame(activeCamEnt);
 
@@ -1660,16 +1846,16 @@ function renderCaps() {
     d.innerHTML = `
       <img src="${cap.url}" alt="">
       <div class="acts">
-        <button class="mini" data-a="dl" title="Descargar JPG">DL</button>
-        <button class="mini" data-a="del" title="Eliminar">x</button>
+        <button class="mini" data-a="dl" title="${t('Descargar JPG')}">DL</button>
+        <button class="mini" data-a="del" title="${t('Eliminar')}">x</button>
       </div>
       <div class="cap-nm">${escapeHtml(cap.name)} · ${escapeHtml(cap.cam)}</div>`;
     d.querySelector('img').onclick = () => {
       openModal(cap.name + ' - ' + cap.cam, `
         <img src="${cap.url}" style="width:100%;border-radius:10px">
         <div class="grid2" style="margin-top:10px">
-          <button class="btn primary" id="mCapDl">Descargar JPG</button>
-          <button class="btn outline" id="mCapClose">Cerrar</button>
+          <button class="btn primary" id="mCapDl">${t('Descargar JPG')}</button>
+          <button class="btn outline" id="mCapClose">${t('Cerrar')}</button>
         </div>`);
       $('mCapDl').onclick = () => download(`${sanitize(sceneName)}_${sanitize(cap.cam)}_${idx + 1}.jpg`, cap.url);
       $('mCapClose').onclick = closeModal;
@@ -1697,6 +1883,7 @@ const {
   THREE,
   R,
   env,
+  t,
   SKY_PRESETS,
   FLOORS,
   JOINT_LABELS,
@@ -1720,9 +1907,9 @@ function renderShots() {
       ${sh.thumb ? `<img src="${sh.thumb}" alt="">` : ''}
       <div class="sh-bd">
         <div class="sh-nm">${escapeHtml(sh.name)}</div>
-        <div class="sh-meta">${escapeHtml(sh.shotType)} · ${escapeHtml(sh.cameraName)}</div>
+        <div class="sh-meta">${escapeHtml(t(sh.shotType))} · ${escapeHtml(sh.cameraName)}</div>
         <div class="sh-acts">
-          <button class="mini" data-a="apply">Aplicar</button>
+          <button class="mini" data-a="apply">${t('Aplicar')}</button>
           <button class="mini" data-a="prompt">Prompt</button>
           <button class="mini" data-a="del">x</button>
         </div>
@@ -1753,17 +1940,17 @@ function applyShot(sh) {
     controls.target.copy(freeCam.position).add(dir.multiplyScalar(4));
     controls.update();
   }
-  toast(`Toma "${sh.name}" aplicada`);
+  toast(t('Toma "{n}" aplicada', { n: sh.name }));
 }
 function showShotPrompt(sh) {
   openModal('Prompt - ' + sh.name, `
     ${sh.thumb ? `<img src="${sh.thumb}" style="width:100%;border-radius:10px;margin-bottom:10px">` : ''}
     <textarea id="mPromptTxt" rows="12" readonly style="font-size:12px;line-height:1.5">${escapeHtml(sh.prompt)}</textarea>
     <div class="grid2" style="margin-top:10px">
-      <button class="btn primary" id="mPromptCopy">Copiar prompt</button>
-      <button class="btn outline" id="mPromptRegen">Regenerar con estado actual</button>
+      <button class="btn primary" id="mPromptCopy">${t('Copiar prompt')}</button>
+      <button class="btn outline" id="mPromptRegen">${t('Regenerar con estado actual')}</button>
     </div>
-    ${sh.notes ? `<div class="hint">Notas: ${escapeHtml(sh.notes)}</div>` : ''}`);
+    ${sh.notes ? `<div class="hint">${t('Notas')}: ${escapeHtml(sh.notes)}</div>` : ''}`);
   $('mPromptCopy').onclick = () => copyText(sh.prompt);
   $('mPromptRegen').onclick = () => {
     const ent = R.cameras.find(c => c.id === sh.cameraId) || null;
@@ -1780,21 +1967,21 @@ function showShotPrompt(sh) {
 }
 $('btnShot').onclick = () => {
   const camOpts = [
-    ...(viewCam === freeCam ? [`<option value="">Vista libre actual</option>`] : []),
+    ...(viewCam === freeCam ? [`<option value="">${t('Vista libre actual')}</option>`] : []),
     ...R.cameras.map(c => `<option value="${c.id}" ${activeCamEnt === c ? 'selected' : ''}>${escapeHtml(c.name)}</option>`)
   ].join('');
   if (!camOpts) { toast('Crea una camara primero'); return; }
-  openModal('Guardar toma', `
-    <div class="mrow"><label>Nombre</label><input type="text" id="mShotName" value="Toma ${String(R.shots.length + 1).padStart(2, '0')}"></div>
-    <div class="mrow"><label>Camara</label><select id="mShotCam">${camOpts}</select></div>
-    <div class="mrow"><label>Tipo de plano</label><select id="mShotType">${SHOT_TYPES.map(t => `<option>${t}</option>`).join('')}</select></div>
+  openModal(t('Guardar toma'), `
+    <div class="mrow"><label>${t('Nombre')}</label><input type="text" id="mShotName" value="${t('Toma')} ${String(R.shots.length + 1).padStart(2, '0')}"></div>
+    <div class="mrow"><label>${t('Cámara')}</label><select id="mShotCam">${camOpts}</select></div>
+    <div class="mrow"><label>${t('Tipo de plano')}</label><select id="mShotType">${SHOT_TYPES.map(st => `<option value="${escapeHtml(st)}">${escapeHtml(t(st))}</option>`).join('')}</select></div>
     <div class="mrow">
-      <label>Direccion de personajes visibles</label>
+      <label>${t('Direccion de personajes visibles')}</label>
       <div id="mShotCharDirs"></div>
-      <div class="hint">Escribe hacia donde mira, avanza o dirige su atencion cada personaje. Si lo dejas vacio, se usara la orientacion inferida por rotacion.</div>
+      <div class="hint">${t('Escribe hacia donde mira, avanza o dirige su atencion cada personaje. Si lo dejas vacio, se usara la orientacion inferida por rotacion.')}</div>
     </div>
-    <div class="mrow"><label>Notas de direccion</label><textarea id="mShotNotes" rows="3" placeholder="Intencion de la toma, movimiento, atmosfera..."></textarea></div>
-    <div class="mrow"><button class="btn primary w100" id="mShotOk">Guardar toma</button></div>`);
+    <div class="mrow"><label>${t('Notas de direccion')}</label><textarea id="mShotNotes" rows="3" placeholder="${t('Intencion de la toma, movimiento, atmosfera...')}"></textarea></div>
+    <div class="mrow"><button class="btn primary w100" id="mShotOk">${t('Guardar toma')}</button></div>`);
   const camSel = $('mShotCam');
   const directionDrafts = {};
   const selectedShotCamEnt = () => R.cameras.find(c => c.id === camSel.value) || null;
@@ -1823,7 +2010,7 @@ $('btnShot').onclick = () => {
     const directions = collectShotDirectionInputs(directionDrafts);
     const shotState = captureShotState(ent, directions);
     R.shots.push({
-      id: uid('shot'), name: $('mShotName').value.trim() || 'Toma',
+      id: uid('shot'), name: $('mShotName').value.trim() || t('Toma'),
       cameraId: ent ? ent.id : null, cameraName: camDisplayName(ent),
       camState: { pos: v3(cam.position), rot: eDeg(cam.rotation), fov: +cam.fov.toFixed(1) },
       shotType, notes,
@@ -1853,12 +2040,14 @@ function serializeScene(opts = {}) {
       id: c.id, name: c.name, role: c.role, emotion: c.emotion, notes: c.notes,
       charKind: c.charKind, color: c.colorHex, tintOnly: !!c.tintOnly, assetId: c.assetId || null,
       position: v3(c.root.position), rotation: eDeg(c.root.rotation), scale: v3(c.root.scale),
-      poseName: c.poseName, pose: (c.joints || c.rig) ? currentPoseOf(c) : null
+      poseName: c.poseName, pose: (c.joints || c.rig) ? currentPoseOf(c) : null,
+      path: c.path && c.path.keyframes.length ? JSON.parse(JSON.stringify(c.path)) : null
     })),
     props: R.props.map(p => ({
       id: p.id, name: p.name, type: p.type, color: p.colorHex, assetId: p.assetId || null,
       position: v3(p.root.position), rotation: eDeg(p.root.rotation), scale: v3(p.root.scale),
-      light: p.lightParams ? { ...p.lightParams } : null
+      light: p.lightParams ? { ...p.lightParams } : null,
+      path: p.path && p.path.keyframes.length ? JSON.parse(JSON.stringify(p.path)) : null
     })),
     cameras: R.cameras.map(c => ({
       id: c.id, name: c.name, fov: +c.cam.fov.toFixed(1), shotType: c.shotType,
@@ -1882,8 +2071,14 @@ function clearScene(opts = {}) {
   stopPB();
   setViewCamera(null);
   tc.detach(); selected = null; $('rightPanel').classList.add('hidden');
-  for (const c of R.characters) { scene.remove(c.root); disposeObject(c.root); }
-  for (const p of R.props) { scene.remove(p.root); disposeObject(p.root); }
+  for (const c of R.characters) {
+    scene.remove(c.root); disposeObject(c.root);
+    if (c.pathViz) { scene.remove(c.pathViz); disposeObject(c.pathViz); }
+  }
+  for (const p of R.props) {
+    scene.remove(p.root); disposeObject(p.root);
+    if (p.pathViz) { scene.remove(p.pathViz); disposeObject(p.pathViz); }
+  }
   for (const c of R.cameras) {
     scene.remove(c.cam);
     if (c.pathViz) { scene.remove(c.pathViz); disposeObject(c.pathViz); }
@@ -1910,10 +2105,10 @@ function applySceneData(data, opts = {}) {
       if (c.charKind === 'glb') {
         instantiateGlb(c.assetId, 'character', { id: c.id, name: c.name, role: c.role, emotion: c.emotion,
           notes: c.notes, color: c.color, tintOnly: !!c.tintOnly, pose: c.pose, poseName: c.poseName,
-          pos: c.position, rot: c.rotation, scale: c.scale }, false);
+          pos: c.position, rot: c.rotation, scale: c.scale, path: c.path || null }, false);
       } else {
         const ent = addMannequin({ noUndo: true, noSelect: true, id: c.id, name: c.name, role: c.role,
-          emotion: c.emotion, notes: c.notes, color: c.color, pos: c.position });
+          emotion: c.emotion, notes: c.notes, color: c.color, pos: c.position, path: c.path || undefined });
         ent.root.rotation.set(DEG(c.rotation[0]), DEG(c.rotation[1]), DEG(c.rotation[2]));
         ent.root.scale.set(...(c.scale || [1, 1, 1]));
         if (c.pose) applyPose(ent, c.pose, c.poseName);
@@ -1922,10 +2117,11 @@ function applySceneData(data, opts = {}) {
     colorIdx = R.characters.length;
     for (const p of data.props || []) {
       if (p.type === 'glb') {
-        instantiateGlb(p.assetId, 'prop', { id: p.id, name: p.name, pos: p.position, rot: p.rotation, scale: p.scale }, false);
+        instantiateGlb(p.assetId, 'prop', { id: p.id, name: p.name, pos: p.position, rot: p.rotation,
+          scale: p.scale, path: p.path || null }, false);
       } else {
         const ent = addProp(p.type, { noUndo: true, noSelect: true, id: p.id, name: p.name, color: p.color,
-          pos: p.position, lightParams: p.light || undefined });
+          pos: p.position, lightParams: p.light || undefined, path: p.path || undefined });
         ent.root.rotation.set(DEG(p.rotation[0]), DEG(p.rotation[1]), DEG(p.rotation[2]));
         ent.root.scale.set(...(p.scale || [1, 1, 1]));
       }
@@ -1979,27 +2175,38 @@ function doRedo() {
 const LSKEY = 'bd_scenes_v1';
 function savedScenes() { try { return JSON.parse(localStorage.getItem(LSKEY) || '{}'); } catch { return {}; } }
 function persistScenes(all) { localStorage.setItem(LSKEY, JSON.stringify(all)); }
+// miniatura de la vista actual para el lanzador de proyectos
+function makeSceneThumb() {
+  try {
+    renderToCapCanvas(activeCamEnt);
+    const c = document.createElement('canvas');
+    c.width = 480; c.height = 270;
+    c.getContext('2d').drawImage(capCanvas, 0, 0, 480, 270);
+    return c.toDataURL('image/jpeg', 0.72);
+  } catch { return null; }
+}
 function saveSceneLocal(name, silent) {
   const all = savedScenes();
-  try { all[name] = serializeScene({ assets: true }); persistScenes(all); }
+  const thumb = makeSceneThumb();
+  try { const d = serializeScene({ assets: true }); d.thumb = thumb; all[name] = d; persistScenes(all); }
   catch (e1) {
     try {
-      all[name] = serializeScene({});
+      const d = serializeScene({}); d.thumb = thumb; all[name] = d;
       persistScenes(all);
       if (!silent) toast('Guardada sin los modelos GLB (superan el límite del navegador). Usa «Exportar» para conservarlos.');
       return true;
     } catch (e2) { if (!silent) toast('Almacenamiento del navegador lleno: usa «Exportar» para guardar como archivo.'); return false; }
   }
-  if (!silent) toast(`Escena "${name}" guardada en el navegador`);
+  if (!silent) toast(t('Escena "{n}" guardada en el navegador', { n: name }));
   return true;
 }
-function fmtDate(iso) { try { return new Date(iso).toLocaleString('es', { dateStyle: 'short', timeStyle: 'short' }); } catch { return ''; } }
+function fmtDate(iso) { try { return new Date(iso).toLocaleString(getLang(), { dateStyle: 'short', timeStyle: 'short' }); } catch { return ''; } }
 
 $('btnSave').onclick = () => {
-  openModal('Guardar escena', `
-    <div class="mrow"><label>Nombre</label><input type="text" id="mSaveName" value="${escapeHtml(sceneName)}"></div>
-    <div class="hint">Se guarda en este navegador. Las capturas no se incluyen aqui: usa Exportar para generar un archivo completo con capturas y modelos GLB.</div>
-    <div class="mrow"><button class="btn primary w100" id="mSaveOk">Guardar</button></div>`);
+  openModal(t('Guardar escena'), `
+    <div class="mrow"><label>${t('Nombre')}</label><input type="text" id="mSaveName" value="${escapeHtml(sceneName)}"></div>
+    <div class="hint">${t('Se guarda en este navegador. Las capturas no se incluyen aqui: usa Exportar para generar un archivo completo con capturas y modelos GLB.')}</div>
+    <div class="mrow"><button class="btn primary w100" id="mSaveOk">${t('Guardar')}</button></div>`);
   $('mSaveOk').onclick = () => {
     const n = $('mSaveName').value.trim() || sceneName;
     sceneName = n; $('inpSceneName').value = n;
@@ -2010,25 +2217,25 @@ $('btnOpen').onclick = () => {
   const all = savedScenes();
   const names = Object.keys(all).sort();
   if (!names.length) {
-    openModal('Abrir escena', '<div class="hint">No hay escenas guardadas en este navegador. Usa Guardar o Importar primero.</div>');
+    openModal(t('Abrir escena'), `<div class="hint">${t('No hay escenas guardadas en este navegador. Usa Guardar o Importar primero.')}</div>`);
     return;
   }
-  openModal('Abrir escena', names.map((n, i) => `
+  openModal(t('Abrir escena'), names.map((n, i) => `
     <div class="item" data-i="${i}" style="cursor:default">
-      <span>Escena</span>
+      <span>${t('Escena')}</span>
       <span class="nm">${escapeHtml(n)}<br><span class="hint" style="margin:0">${fmtDate(all[n].savedAt)}</span></span>
-      <button class="mini" data-a="load">Cargar</button>
-      <button class="mini" data-a="dup" title="Duplicar">Dup</button>
-      <button class="mini" data-a="del" title="Eliminar">x</button>
+      <button class="mini" data-a="load">${t('Cargar')}</button>
+      <button class="mini" data-a="dup" title="${t('Duplicar')}">Dup</button>
+      <button class="mini" data-a="del" title="${t('Eliminar')}">x</button>
     </div>`).join(''));
   document.querySelectorAll('#modalBody .item').forEach(row => {
     const n = names[+row.dataset.i];
     row.querySelector('[data-a="load"]').onclick = () => {
       pushUndo(); applySceneData(all[n], {}); closeModal();
-      toast(`Escena "${n}" cargada`);
+      toast(t('Escena "{n}" cargada', { n }));
     };
     row.querySelector('[data-a="dup"]').onclick = () => {
-      const copy = n + ' copia';
+      const copy = n + ' ' + t('copia');
       all[copy] = JSON.parse(JSON.stringify(all[n]));
       try { persistScenes(all); } catch { toast('Sin espacio para duplicar'); return; }
       $('btnOpen').onclick();
@@ -2059,51 +2266,53 @@ $('fileImport').addEventListener('change', e => {
     if (data.app !== 'BlockoutDirector') { toast('Este archivo no es una escena de Blockout Director'); return; }
     pushUndo();
     applySceneData(data, {});
-    toast(`Escena "${data.sceneName}" importada`);
+    closeLauncher();
+    toast(t('Escena "{n}" importada', { n: data.sceneName }));
   }).catch(err => { console.error(err); toast('No se pudo leer el archivo JSON'); });
 });
 $('btnNew').onclick = () => {
-  openModal('Nueva escena', `
-    <div class="hint">Se creara una escena vacia. La actual se puede recuperar con Deshacer (Ctrl+Z), o desde Abrir si la guardaste.</div>
-    <div class="mrow"><label>Nombre</label><input type="text" id="mNewName" value="Escena_${String(Object.keys(savedScenes()).length + 1).padStart(3, '0')}"></div>
-    <div class="mrow"><button class="btn primary w100" id="mNewOk">Crear escena vacia</button></div>`);
+  openModal(t('Nueva escena'), `
+    <div class="hint">${t('Se creara una escena vacia. La actual se puede recuperar con Deshacer (Ctrl+Z), o desde Abrir si la guardaste.')}</div>
+    <div class="mrow"><label>${t('Nombre')}</label><input type="text" id="mNewName" value="${t('Escena')}_${String(Object.keys(savedScenes()).length + 1).padStart(3, '0')}"></div>
+    <div class="mrow"><button class="btn primary w100" id="mNewOk">${t('Crear escena vacia')}</button></div>`);
   $('mNewOk').onclick = () => {
     pushUndo();
     applySceneData({
-      app: 'BlockoutDirector', sceneName: $('mNewName').value.trim() || 'Escena', description: '',
+      app: 'BlockoutDirector', sceneName: $('mNewName').value.trim() || t('Escena'), description: '',
       environment: { ...DEFAULT_ENV, sky: 'dia', floor: 'concreto', sun: 3.2, sunColor: '#fff7e8', amb: 0.95, ambColor: '#cfe2f3' }
     }, {});
     closeModal();
+    closeLauncher();
     toast('Escena nueva creada');
   };
 };
 
 // ---------- guia ----------
-$('btnGuide').onclick = () => openModal('Guia rapida', `
-  <p style="margin-top:0"><b>Blockout Director</b> es tu set virtual: monta la escena, dirige las camaras y captura fotogramas de referencia para mantener consistencia en herramientas de IA generativa.</p>
-  <div class="lbl">Flujo de trabajo</div>
+$('btnGuide').onclick = () => openModal(t('Guia rapida'), `
+  <p style="margin-top:0">${t('<b>Blockout Director</b> es tu set virtual: monta la escena, dirige las camaras y captura fotogramas de referencia para mantener consistencia en herramientas de IA generativa.')}</p>
+  <div class="lbl">${t('Flujo de trabajo')}</div>
   <ol style="margin:4px 0;padding-left:18px;line-height:1.7">
-    <li>Configura <b>Entorno</b> (skybox, suelo, iluminacion).</li>
-    <li>Anade <b>Personajes</b> (maniquies o GLB) y asignales rol, emocion y pose.</li>
-    <li>Coloca <b>Props</b> y luces puntuales.</li>
-    <li>Navega hasta un buen encuadre y pulsa <b>+</b> en Perspectivas para crear una camara ahi.</li>
-    <li>Anima la camara con <b>Trayectoria</b> (keyframes e interpolacion).</li>
-    <li><b>Capturar</b> genera un JPG limpio 1600x900; <b>Guardar toma</b> ademas guarda encuadre, notas y un prompt listo para IA.</li>
-    <li><b>Guardar</b> en el navegador o <b>Exportar</b> como archivo .json (incluye GLB y capturas).</li>
+    <li>${t('Configura <b>Entorno</b> (skybox, suelo, iluminacion).')}</li>
+    <li>${t('Anade <b>Personajes</b> (maniquies o GLB) y asignales rol, emocion y pose.')}</li>
+    <li>${t('Coloca <b>Props</b> y luces puntuales.')}</li>
+    <li>${t('Navega hasta un buen encuadre y pulsa <b>+</b> en Perspectivas para crear una camara ahi.')}</li>
+    <li>${t('Anima camaras, personajes y props con <b>Trayectorias</b>: selecciona la entidad en el timeline, muevela y anade keyframes. Al reproducir, todo lo que tenga keyframes se anima a la vez.')}</li>
+    <li>${t('<b>Capturar</b> genera un JPG limpio 1600x900; <b>Guardar toma</b> ademas guarda encuadre, notas y un prompt listo para IA; el boton de video exporta la trayectoria como WebM.')}</li>
+    <li>${t('<b>Guardar</b> en el navegador o <b>Exportar</b> como archivo .json (incluye GLB y capturas). En <b>Proyectos</b> encuentras todo lo guardado.')}</li>
   </ol>
-  <div class="lbl">Controles</div>
+  <div class="lbl">${t('Controles')}</div>
   <ul style="margin:4px 0;padding-left:18px;line-height:1.7">
-    <li>Clic izquierdo + arrastrar: orbitar. Rueda: zoom. Clic derecho: paneo.</li>
-    <li>Clic sobre un objeto: seleccionar. <b>W/E/R</b>: mover / rotar / escalar.</li>
-    <li><b>F</b>: centrar vista en la seleccion. <b>Supr</b>: eliminar. <b>Ctrl+D</b>: duplicar. <b>Ctrl+Z / Ctrl+Y</b>: deshacer / rehacer.</li>
-    <li>En Perspectivas puedes mirar por cualquier camara y reencuadrarla navegando.</li>
+    <li>${t('Clic izquierdo + arrastrar: orbitar. Rueda: zoom. Clic derecho: paneo.')}</li>
+    <li>${t('Clic sobre un objeto: seleccionar. <b>W/E/R</b>: mover / rotar / escalar.')}</li>
+    <li>${t('<b>F</b>: centrar vista en la seleccion. <b>Supr</b>: eliminar. <b>Ctrl+D</b>: duplicar. <b>Ctrl+Z / Ctrl+Y</b>: deshacer / rehacer.')}</li>
+    <li>${t('En Perspectivas puedes mirar por cualquier camara y reencuadrarla navegando.')}</li>
   </ul>
-  <div class="hint">Consejo: entra a la vista de una camara, encuadra navegando y anade keyframes en distintos momentos para crear un travelling suave.</div>`);
+  <div class="hint">${t('Consejo: entra a la vista de una camara, encuadra navegando y anade keyframes en distintos momentos para crear un travelling suave.')}</div>`);
 
 // ---------- construcción de UI estática ----------
 function buildStaticUI() {
   $('skyChips').innerHTML = Object.entries(SKY_PRESETS).map(([k, p]) =>
-    `<button class="chip" data-sky="${k}">${p.label}</button>`).join('');
+    `<button class="chip" data-sky="${k}">${t(p.label)}</button>`).join('');
   document.querySelectorAll('#skyChips .chip').forEach(c => c.onclick = () => {
     pushUndo();
     const p = SKY_PRESETS[c.dataset.sky];
@@ -2111,9 +2320,9 @@ function buildStaticUI() {
     env.sun = p.sun; env.sunColor = p.sunColor; env.amb = p.amb; env.ambColor = p.ambColor;
     applyEnv(); syncEnvUI();
   });
-  $('selFloor').innerHTML = Object.entries(FLOORS).map(([k, f]) => `<option value="${k}">${f.label}</option>`).join('');
+  $('selFloor').innerHTML = Object.entries(FLOORS).map(([k, f]) => `<option value="${k}">${t(f.label)}</option>`).join('');
   $('propBtns').innerHTML = Object.entries(PROP_DEFS).map(([k, d]) =>
-    `<button class="btn outline" data-p="${k}"><i class="ph ${d.icon}"></i>${d.label}</button>`).join('');
+    `<button class="btn outline" data-p="${k}"><i class="ph ${d.icon}"></i>${t(d.label)}</button>`).join('');
   document.querySelectorAll('#propBtns .btn').forEach(b => b.onclick = () => addProp(b.dataset.p));
   $('btnAddChar').onclick = () => addCharacterAuto({});
   $('btnAddMan').onclick = () => addMannequin({});
@@ -2123,8 +2332,8 @@ function buildStaticUI() {
 // ---------- escena de ejemplo ----------
 function buildSampleScene() {
   booting = true;
-  sceneName = 'Reunión en la galería';
-  sceneDesc = 'Cuatro personajes conversan alrededor de una mesa de madera en una sala interior; un quinto se dirige a la puerta.';
+  sceneName = t('Reunión en la galería');
+  sceneDesc = t('Cuatro personajes conversan alrededor de una mesa de madera en una sala interior; un quinto se dirige a la puerta.');
   Object.assign(env, { sky: 'interior', floor: 'madera', sun: 2.4, sunColor: '#fff2df', amb: 0.85, ambColor: '#cdd3da' });
 
   addProp('mesa', { noUndo: true, noSelect: true, pos: [0, 0, 0] });
@@ -2135,16 +2344,16 @@ function buildSampleScene() {
   addProp('pared', { noUndo: true, noSelect: true, pos: [1.55, 0, -3.6] });
   addProp('puerta', { noUndo: true, noSelect: true, pos: [3.9, 0, -1.8], rotY: -70 });
 
-  addCharacterAuto({ noUndo: true, noSelect: true, name: 'Hombre de tweed', role: 'Secundario', color: '#e6c84f',
-    pos: [-1.25, 0, -0.3], rotY: 90, pose: 'Sentado hablando', emotion: 'Interesado' });
-  addCharacterAuto({ noUndo: true, noSelect: true, name: 'Hombre de traje oscuro', role: 'Protagonista', color: '#63b56a',
-    pos: [1.25, 0, -0.3], rotY: -90, pose: 'Sentado', emotion: 'Serio' });
-  addCharacterAuto({ noUndo: true, noSelect: true, name: 'Hombre de traje rojo', role: 'Secundario', color: '#d94f6e',
+  addCharacterAuto({ noUndo: true, noSelect: true, name: t('Hombre de tweed'), role: t('Secundario'), color: '#e6c84f',
+    pos: [-1.25, 0, -0.3], rotY: 90, pose: 'Sentado hablando', emotion: t('Interesado') });
+  addCharacterAuto({ noUndo: true, noSelect: true, name: t('Hombre de traje oscuro'), role: t('Protagonista'), color: '#63b56a',
+    pos: [1.25, 0, -0.3], rotY: -90, pose: 'Sentado', emotion: t('Serio') });
+  addCharacterAuto({ noUndo: true, noSelect: true, name: t('Hombre de traje rojo'), role: t('Secundario'), color: '#d94f6e',
     pos: [-1.25, 0, 0.55], rotY: 90, pose: 'Sentado' });
-  addCharacterAuto({ noUndo: true, noSelect: true, name: 'Mujer de vestido gris', role: 'Testigo', color: '#e8896a',
-    pos: [-2.1, 0, -1.35], rotY: 57, pose: 'Hablando', emotion: 'Inquieta' });
-  addCharacterAuto({ noUndo: true, noSelect: true, name: 'Hombre de abrigo marrón', role: 'Antagonista', color: '#2fa8a8',
-    pos: [2.7, 0, -1.3], rotY: 112, pose: 'Caminando', notes: 'Se dirige a la puerta' });
+  addCharacterAuto({ noUndo: true, noSelect: true, name: t('Mujer de vestido gris'), role: t('Testigo'), color: '#e8896a',
+    pos: [-2.1, 0, -1.35], rotY: 57, pose: 'Hablando', emotion: t('Inquieta') });
+  addCharacterAuto({ noUndo: true, noSelect: true, name: t('Hombre de abrigo marrón'), role: t('Antagonista'), color: '#2fa8a8',
+    pos: [2.7, 0, -1.3], rotY: 112, pose: 'Caminando', notes: t('Se dirige a la puerta') });
   colorIdx = 5;
 
   addCamera({ noUndo: true, noSelect: true, name: 'Main Shot', fov: 38, shotType: 'Plano general',
@@ -2156,18 +2365,113 @@ function buildSampleScene() {
   booting = false;
 }
 
+/* ============================================================
+   LANZADOR DE PROYECTOS - menú previo a la escena
+   ============================================================ */
+const AUTOSAVE_KEY = '_Autoguardado';
+
+function openLauncher() { renderLauncher(); $('launcher').classList.remove('hidden'); }
+function closeLauncher() { $('launcher').classList.add('hidden'); }
+
+function renderLauncher() {
+  const all = savedScenes();
+  const names = Object.keys(all).sort((a, b) => (all[b].savedAt || '').localeCompare(all[a].savedAt || ''));
+  const el = $('lcGrid'); el.innerHTML = '';
+  for (const n of names) {
+    const d = all[n];
+    const isAuto = n === AUTOSAVE_KEY;
+    const card = document.createElement('div');
+    card.className = 'lc-item';
+    card.innerHTML = `
+      <div class="lc-thumb">${d.thumb ? `<img src="${d.thumb}" alt="">` : '<i class="ph ph-film-slate"></i>'}
+        ${isAuto ? `<span class="lc-badge">${t('Autoguardado')}</span>` : ''}
+        <div class="lc-acts">
+          ${isAuto ? '' : `<button class="mini" data-a="dup" title="${t('Duplicar')}"><i class="ph ph-copy"></i></button>`}
+          <button class="mini" data-a="del" title="${t('Eliminar')}"><i class="ph ph-trash"></i></button>
+        </div>
+      </div>
+      <div class="lc-bd">
+        <div class="lc-nm">${escapeHtml(isAuto ? (d.sceneName || n) : n)}</div>
+        <div class="lc-date">${fmtDate(d.savedAt)}</div>
+      </div>`;
+    card.onclick = () => {
+      pushUndo(); applySceneData(d, {}); closeLauncher();
+      toast(t('Escena "{n}" cargada', { n: isAuto ? (d.sceneName || n) : n }));
+    };
+    const dup = card.querySelector('[data-a="dup"]');
+    if (dup) dup.onclick = e => {
+      e.stopPropagation();
+      const allNow = savedScenes();
+      allNow[n + ' ' + t('copia')] = JSON.parse(JSON.stringify(allNow[n]));
+      try { persistScenes(allNow); } catch { toast('Sin espacio para duplicar'); return; }
+      renderLauncher();
+    };
+    card.querySelector('[data-a="del"]').onclick = e => {
+      e.stopPropagation();
+      const allNow = savedScenes();
+      delete allNow[n];
+      try { persistScenes(allNow); } catch {}
+      renderLauncher();
+    };
+    el.appendChild(card);
+  }
+}
+$('btnProjects').onclick = openLauncher;
+$('lcContinue').onclick = closeLauncher;
+$('lcNew').onclick = () => $('btnNew').onclick();
+$('lcImport').onclick = () => $('fileImport').click();
+$('lcSample').onclick = () => {
+  pushUndo();
+  clearScene({});
+  buildSampleScene();
+  postLoadRefresh();
+  closeLauncher();
+  toast('Escena de ejemplo cargada');
+};
+
+/* ============================================================
+   IDIOMA - conmutador ES/EN
+   ============================================================ */
+function refreshLanguage() {
+  document.documentElement.lang = getLang();
+  document.title = t('Blockout Director - Consola de dirección 3D');
+  applyStaticI18n();
+  const next = getLang() === 'es' ? 'EN' : 'ES';
+  $('langLabel').textContent = next;
+  $('lcLangLabel').textContent = next;
+  $('btnLang').title = $('lcLang').title = t('Cambiar idioma (ES/EN)');
+  buildStaticUI();
+  buildInterpOptions();
+  if (tlEnt && tlEnt.path) $('tlInterp').value = tlEnt.path.interpolation;
+  syncEnvUI();
+  renderCharList(); renderPropList(); renderPersp(); renderShots(); renderCaps();
+  refreshPipSelect(); refreshTlCams(); refreshKfs();
+  if (selected) renderInspector();
+  if (!$('launcher').classList.contains('hidden')) renderLauncher();
+}
+function toggleLang() { setLang(getLang() === 'es' ? 'en' : 'es'); refreshLanguage(); }
+$('btnLang').onclick = toggleLang;
+$('lcLang').onclick = toggleLang;
+
 // ---------- arranque ----------
+function postLoadRefresh() {
+  applyEnv(); syncEnvUI();
+  $('inpSceneName').value = sceneName;
+  $('inpSceneDesc').value = sceneDesc;
+  renderCharList(); renderPropList(); renderPersp(); renderShots(); renderCaps();
+  refreshPipSelect(); refreshTlCams(); refreshKfs();
+}
 buildStaticUI();
 await tryLoadDefaultChar();
+await loadCameraModel();
 buildSampleScene();
-applyEnv(); syncEnvUI();
-$('inpSceneName').value = sceneName;
-$('inpSceneDesc').value = sceneDesc;
-renderCharList(); renderPropList(); renderPersp(); renderShots(); renderCaps();
-refreshPipSelect(); refreshTlCams(); refreshKfs();
-setInterval(() => { try { saveSceneLocal('_Autoguardado', true); } catch {} }, 90000);
+postLoadRefresh();
+refreshLanguage();
+setInterval(() => { try { saveSceneLocal(AUTOSAVE_KEY, true); } catch {} }, 90000);
 animate();
+openLauncher();
 toast('Bienvenido a Blockout Director - pulsa Guía para empezar', 5200);
 
 // acceso de depuración desde la consola del navegador
-window.BD = { R, scene, THREE, applyPoseByName, captureFrame, generatePrompt, characterFacingInfo };
+window.BD = { R, scene, THREE, freeCam, controls, applyPoseByName, captureFrame, generatePrompt, characterFacingInfo,
+  openLauncher, exportVideo, setLang: l => { setLang(l); refreshLanguage(); } };

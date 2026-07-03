@@ -2,6 +2,7 @@ export function createPromptTools({
   THREE,
   R,
   env,
+  t,
   SKY_PRESETS,
   FLOORS,
   JOINT_LABELS,
@@ -69,8 +70,8 @@ export function createPromptTools({
 
   function compassLabelFromYaw(yaw) {
     const labels = [
-      'el fondo de la escena (-Z)', 'fondo-derecha (-Z/+X)', 'la derecha de la escena (+X)', 'frente-derecha (+Z/+X)',
-      'el frente de la escena (+Z)', 'frente-izquierda (+Z/-X)', 'la izquierda de la escena (-X)', 'fondo-izquierda (-Z/-X)'
+      t('el fondo de la escena (-Z)'), t('fondo-derecha (-Z/+X)'), t('la derecha de la escena (+X)'), t('frente-derecha (+Z/+X)'),
+      t('el frente de la escena (+Z)'), t('frente-izquierda (+Z/-X)'), t('la izquierda de la escena (-X)'), t('fondo-izquierda (-Z/-X)')
     ];
     return labels[Math.round(yaw / 45) % labels.length];
   }
@@ -80,29 +81,29 @@ export function createPromptTools({
     const yaw = (RAD(Math.atan2(forward.x, -forward.z)) + 360) % 360;
     const toCam = cam.position.clone().sub(ent.root.position);
     toCam.y = 0;
-    let camera = 'relacion con camara no determinada';
+    let camera = t('relacion con camara no determinada');
     if (toCam.lengthSq() > 0.0001) {
       toCam.normalize();
       const dot = THREE.MathUtils.clamp(forward.dot(toCam), -1, 1);
       const side = forward.clone().cross(toCam).y;
-      if (dot > 0.65) camera = 'de frente a la camara';
-      else if (dot < -0.65) camera = 'de espaldas a la camara';
-      else camera = side >= 0 ? 'perfil izquierdo hacia la camara' : 'perfil derecho hacia la camara';
+      if (dot > 0.65) camera = t('de frente a la camara');
+      else if (dot < -0.65) camera = t('de espaldas a la camara');
+      else camera = side >= 0 ? t('perfil izquierdo hacia la camara') : t('perfil derecho hacia la camara');
     }
-    const scene = `orientado hacia ${compassLabelFromYaw(yaw)}`;
+    const scene = t('orientado hacia {d}', { d: compassLabelFromYaw(yaw) });
     return { yaw: +yaw.toFixed(1), scene, camera, text: `${scene}; ${camera}` };
   }
 
   function poseDetailsForPrompt(pose, charKind) {
     if (!pose) return charKind === 'glb'
-      ? 'modelo GLB sin rig editable; conservar la postura visible del modelo'
-      : 'sin detalle de articulaciones guardado';
+      ? t('modelo GLB sin rig editable; conservar la postura visible del modelo')
+      : t('sin detalle de articulaciones guardado');
     const out = [];
     if (Math.abs(pose.hipsOffset || 0) > 0.001)
-      out.push(`offset vertical de cadera ${fmtNum(pose.hipsOffset, 3)} m`);
+      out.push(t('offset vertical de cadera {v} m', { v: fmtNum(pose.hipsOffset, 3) }));
     for (const [k, r] of Object.entries(pose.j || {}))
-      out.push(`${JOINT_LABELS[k] || k} rotacion XYZ ${fmtDeg3(r)}`);
-    return out.length ? out.join('; ') : 'pose neutra, articulaciones en 0°';
+      out.push(`${t(JOINT_LABELS[k] || k)} ${t('rotacion XYZ')} ${fmtDeg3(r)}`);
+    return out.length ? out.join('; ') : t('pose neutra, articulaciones en 0°');
   }
 
   function captureShotState(camEnt, directionById = {}) {
@@ -128,14 +129,14 @@ export function createPromptTools({
   function shotDirectionInputsHTML(camEnt, drafts = {}) {
     const cam = activeCam(camEnt);
     const chars = visibleCharactersForCam(cam);
-    if (!chars.length) return '<div class="hint">No hay personajes visibles desde esta camara.</div>';
+    if (!chars.length) return `<div class="hint">${t('No hay personajes visibles desde esta camara.')}</div>`;
     return chars.map(c => {
       const inferred = characterFacingInfo(c, cam).text;
       const value = drafts[c.id] || '';
       return `
         <div class="mrow">
           <label>${escapeHtml(c.name)}</label>
-          <input type="text" data-shot-dir="${c.id}" value="${escapeHtml(value)}" placeholder="Ej. mira hacia la puerta, camina hacia camara, apunta al antagonista">
+          <input type="text" data-shot-dir="${c.id}" value="${escapeHtml(value)}" placeholder="${t('Ej. mira hacia la puerta, camina hacia camara, apunta al antagonista')}">
           <div class="hint">${escapeHtml(inferred)}</div>
         </div>`;
     }).join('');
@@ -155,44 +156,52 @@ export function createPromptTools({
     cam.updateMatrixWorld();
     const dir = new THREE.Vector3(); cam.getWorldDirection(dir);
     const pitch = RAD(Math.asin(Math.max(-1, Math.min(1, -dir.y))));
-    const angleDesc = pitch > 14 ? 'angulo picado (desde arriba)' : pitch < -14 ? 'angulo contrapicado (desde abajo)' : 'a la altura de los personajes';
-    const lightDesc = env.sun < 1.2 ? 'tenue' : env.sun < 3 ? 'media' : 'intensa';
-    const skyLabel = (SKY_PRESETS[env.sky] || SKY_PRESETS.interior).label.toLowerCase();
-    const floorLabel = (FLOORS[env.floor] || FLOORS.madera).label.toLowerCase();
+    const angleDesc = pitch > 14 ? t('angulo picado (desde arriba)') : pitch < -14 ? t('angulo contrapicado (desde abajo)') : t('a la altura de los personajes');
+    const lightDesc = env.sun < 1.2 ? t('tenue') : env.sun < 3 ? t('media') : t('intensa');
+    const skyLabel = t((SKY_PRESETS[env.sky] || SKY_PRESETS.interior).label).toLowerCase();
+    const floorLabel = t((FLOORS[env.floor] || FLOORS.madera).label).toLowerCase();
 
     const snap = shotState || captureShotState(camEnt, {});
     const chars = snap.characterStates || [];
     const props = snap.propStates || [];
 
     const L = [];
-    L.push(`Fotograma cinematografico - ${(shotType || (camEnt ? camEnt.shotType : 'plano general')).toLowerCase()} desde la camara "${camDisplayName(camEnt)}" (FOV ${Math.round(cam.fov)}°, ${angleDesc}).`);
+    L.push(t('Fotograma cinematografico - {shot} desde la camara "{cam}" (FOV {fov}°, {angle}).', {
+      shot: t(shotType || (camEnt ? camEnt.shotType : 'Plano general')).toLowerCase(),
+      cam: camDisplayName(camEnt), fov: Math.round(cam.fov), angle: angleDesc
+    }));
     const noDot = s => String(s).replace(/[.\s]+$/, '');
     const sceneName = getSceneName();
     const sceneDesc = getSceneDesc();
-    L.push(`Escena: ${sceneName}${sceneDesc ? ' - ' + noDot(sceneDesc) : ''}.`);
-    L.push(`Ambiente: cielo tipo ${skyLabel}, suelo de ${floorLabel}, iluminacion ${lightDesc}${env.fog ? ', con niebla atmosferica' : ''}.`);
+    L.push(`${t('Escena')}: ${sceneName}${sceneDesc ? ' - ' + noDot(sceneDesc) : ''}.`);
+    L.push(t('Ambiente: cielo tipo {sky}, suelo de {floor}, iluminacion {light}{fog}.', {
+      sky: skyLabel, floor: floorLabel, light: lightDesc,
+      fog: env.fog ? t(', con niebla atmosferica') : ''
+    }));
     if (chars.length) {
-      L.push('Personajes en cuadro:');
+      L.push(t('Personajes en cuadro:'));
       for (const c of chars) {
         let line = `- ${c.name}`;
         const bits = [];
         if (c.role) bits.push(c.role);
-        if (c.emotion) bits.push('emocion: ' + c.emotion);
+        if (c.emotion) bits.push(t('emocion') + ': ' + c.emotion);
         const dirText = c.direction && (c.direction.defined
           ? `${c.direction.defined} (${c.direction.inferred})`
           : c.direction.inferred);
-        if (dirText) bits.push('direccion: ' + dirText);
+        if (dirText) bits.push(t('direccion') + ': ' + dirText);
         if (bits.length) line += ` (${bits.join('; ')})`;
         if (c.notes) line += ` - ${noDot(c.notes)}`;
         L.push(line + '.');
         if (c.transform)
-          L.push(`  Transform 3D: posicion ${fmtVec3(c.transform.position)}, rotacion XYZ ${fmtDeg3(c.transform.rotation)}, escala ${fmtVec3(c.transform.scale)}.`);
-        L.push(`  Pose corporal: ${c.poseName ? `preset "${c.poseName}"; ` : ''}${poseDetailsForPrompt(c.pose, c.charKind)}.`);
+          L.push(`  ${t('Transform 3D: posicion {p}, rotacion XYZ {r}, escala {s}.', {
+            p: fmtVec3(c.transform.position), r: fmtDeg3(c.transform.rotation), s: fmtVec3(c.transform.scale)
+          })}`);
+        L.push(`  ${t('Pose corporal')}: ${c.poseName ? t('preset "{n}"; ', { n: t(c.poseName) }) : ''}${poseDetailsForPrompt(c.pose, c.charKind)}.`);
       }
-    } else L.push('Sin personajes en cuadro.');
-    if (props.length) L.push(`Props visibles: ${props.map(p => p.name).join(', ')}.`);
-    if (notes) L.push(`Notas de direccion: ${notes}`);
-    L.push('Mantener exactamente la composicion, posiciones, escala y relacion espacial entre personajes de la imagen de referencia adjunta.');
+    } else L.push(t('Sin personajes en cuadro.'));
+    if (props.length) L.push(`${t('Props visibles')}: ${props.map(p => p.name).join(', ')}.`);
+    if (notes) L.push(`${t('Notas de direccion')}: ${notes}`);
+    L.push(t('Mantener exactamente la composicion, posiciones, escala y relacion espacial entre personajes de la imagen de referencia adjunta.'));
     return L.join('\n');
   }
 

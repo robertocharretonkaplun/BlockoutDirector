@@ -7,6 +7,57 @@ y el proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
 
 ---
 
+## [0.6.0] - 2026-07-03
+
+### Añadido
+- **Trayectorias para personajes y props**: el timeline ya no es solo de cámaras.
+  El selector agrupa Cámaras / Personajes / Props; cada entidad guarda sus propios
+  keyframes (posición + rotación; FOV solo en cámaras) y muestra su ruta punteada
+  en ámbar (azul para cámaras). Al **reproducir o mover el scrub se anima todo lo
+  que tenga keyframes a la vez**, como una secuencia real. Nuevo botón «Trayectoria»
+  en el inspector de personajes y props, con contador de keyframes. Las trayectorias
+  se guardan/exportan con la escena, viajan con undo/redo y al duplicar una entidad
+  su ruta se duplica desplazada.
+- **Lanzador de proyectos** (estilo Unreal): al abrir la app aparece un menú previo
+  con todos los proyectos guardados en el navegador como tarjetas con miniatura,
+  fecha y acciones (cargar, duplicar, eliminar), más el autoguardado etiquetado.
+  Botones: Nuevo proyecto, Escena de ejemplo, Importar archivo e Ir a la escena.
+  Reabrible en cualquier momento con el botón «Proyectos» de la barra superior.
+  Las escenas guardadas ahora incluyen una miniatura 480x270 para el lanzador.
+- **Interfaz bilingüe ES/EN**: botón de globo en la barra superior (y en el
+  lanzador) que alterna español/inglés al instante: paneles, inspector, modales,
+  timeline, guía, estados vacíos, escena de ejemplo y **los prompts generados para
+  IA**. La preferencia persiste en el navegador. Los datos guardados (poses, tipos
+  de plano…) usan identificadores en español y se traducen solo al mostrarse, así
+  las escenas son compatibles entre idiomas.
+- **Exportación de video WebM** (extra): nuevo botón de rollo de película en el
+  timeline que graba la trayectoria completa —cámara, personajes y props animados—
+  a 1600x900 y 60 fps usando MediaRecorder, con overlay de progreso y cancelación.
+  Descarga `escena_camara.webm` listo para compartir como previz.
+- **Modelo 3D para las cámaras**: las cámaras de la escena se representan ahora con
+  `Slate/camera.glb` (videocámara real) en lugar del gizmo de caja+cono, con tinte
+  negro mate y sin textura. El modelo se carga una vez al iniciar, se normaliza de
+  tamaño, se orienta para que el objetivo apunte en la dirección de vista (a lo
+  largo del frustum) y se clona por cámara. Si el GLB no está disponible, se usa el
+  gizmo de caja+cono como respaldo.
+
+### Cambiado
+- **Reorganización de assets en carpeta `Slate/`**: el logo (`LogoAO.png`), el
+  modelo de personaje (`exported-model.glb`) y el nuevo modelo de cámara
+  (`camera.glb`) viven ahora en `Slate/`. Se actualizaron las referencias en
+  `index.html` y `src/app.js` respetando el uso de mayúsculas para que funcione
+  también en hosting sensible a mayúsculas (GitHub Pages, Netlify…).
+- El hint del timeline indica qué guarda cada keyframe según el tipo de entidad.
+- La guía rápida documenta las trayectorias multi-entidad, el lanzador de
+  proyectos y la exportación de video.
+- **Lanzador `.bat` mejorado**: el servidor local ahora envía
+  `Cache-Control: no-store` (el navegador siempre carga la última versión de la
+  app, sin Ctrl+F5), escucha solo en `127.0.0.1` (no queda expuesto a la red
+  local), detecta Python (`python` o `py`) y avisa con instrucciones si no está
+  instalado.
+
+---
+
 ## [0.5.0] - 2026-07-03
 
 ### Añadido

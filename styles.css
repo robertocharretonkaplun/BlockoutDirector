@@ -199,6 +199,50 @@ input[type=checkbox]{accent-color:var(--accent)}
 @keyframes popIn{from{opacity:0;transform:scale(.985) translateY(6px)}to{opacity:1;transform:none}}
 @keyframes toastIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 
+/* ---------- lanzador de proyectos ---------- */
+#launcher{position:fixed;inset:0;z-index:40;background:rgba(228,229,233,.78);backdrop-filter:blur(14px);
+  display:flex;align-items:center;justify-content:center;animation:fadeIn .18s ease;padding:20px}
+.lc-card{background:var(--card);border:1px solid var(--line);border-radius:var(--r-card);box-shadow:var(--shadow);
+  width:min(880px,94vw);max-height:88vh;overflow-y:auto;padding:22px 24px;animation:popIn .22s cubic-bezier(.16,1,.3,1)}
+.lc-head{display:flex;align-items:center;gap:12px}
+.lc-head .brand-logo{width:40px;height:40px;flex:0 0 40px}
+.lc-title{font-size:17px;font-weight:600;letter-spacing:-.01em;display:flex;flex-direction:column;gap:1px}
+.lc-title .hint{margin:0;font-weight:400}
+.lc-head .btn{margin-left:auto}
+.lc-actions{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
+.lc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-top:4px}
+.lc-item{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--card);cursor:pointer;
+  transition:border-color .15s ease,box-shadow .15s ease,transform .12s ease}
+.lc-item:hover{border-color:var(--accent-line);box-shadow:var(--shadow-sm);transform:translateY(-1px)}
+.lc-thumb{position:relative;aspect-ratio:16/9;background:linear-gradient(135deg,#eceef2,#dfe2e8);
+  display:flex;align-items:center;justify-content:center}
+.lc-thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.lc-thumb>.ph{font-size:26px;color:#b6bac2}
+.lc-badge{position:absolute;left:6px;top:6px;background:var(--accent-soft);color:var(--accent-ink);
+  border:1px solid var(--accent-line);border-radius:999px;padding:2px 8px;font-size:10px;font-weight:600;z-index:2}
+.lc-acts{position:absolute;right:6px;top:6px;display:flex;gap:4px;opacity:0;transition:opacity .15s ease;z-index:2}
+.lc-item:hover .lc-acts{opacity:1}
+.lc-bd{padding:8px 10px}
+.lc-nm{font-weight:600;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lc-date{font-size:10.5px;color:var(--muted);margin-top:2px;font-family:var(--font-mono)}
+#lcGrid:empty::after{content:'No hay proyectos guardados todavía. Crea uno nuevo o abre la escena de ejemplo.';
+  display:block;grid-column:1/-1;padding:26px 12px;border:1px dashed #d8dade;border-radius:10px;
+  color:var(--muted);font-size:11.5px;line-height:1.5;text-align:center;background:var(--card-2)}
+
+/* ---------- exportación de video ---------- */
+#vidOverlay{position:fixed;inset:0;z-index:70;background:rgba(15,17,22,.5);backdrop-filter:blur(4px);
+  display:flex;align-items:center;justify-content:center;animation:fadeIn .16s ease}
+.vid-card{width:min(340px,90vw)}
+.vid-bar{height:6px;background:var(--card-2);border:1px solid var(--line);border-radius:999px;overflow:hidden;margin-top:8px}
+.vid-fill{height:100%;width:0%;background:var(--accent);border-radius:999px;transition:width .12s linear}
+
+/* ---------- estados vacíos en inglés ---------- */
+html[lang=en] #charList:empty::after{content:'No characters yet. Create one with "+ Character".'}
+html[lang=en] #propList:empty::after{content:'No props yet.'}
+html[lang=en] #shotList:empty::after{content:'No shots. "Save shot" stores framing, character direction, notes and an AI prompt.'}
+html[lang=en] #capList:empty::after{content:'No captures. "Capture" renders a clean 1600x900 JPG to use as reference.'}
+html[lang=en] #lcGrid:empty::after{content:'No saved projects yet. Create a new one or open the sample scene.'}
+
 /* scrollbars */
 ::-webkit-scrollbar{width:8px;height:8px}
 ::-webkit-scrollbar-thumb{background:#cdd0d6;border-radius:8px;border:2px solid transparent;background-clip:content-box}

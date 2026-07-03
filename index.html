@@ -20,92 +20,96 @@
 <div id="viewport"><canvas id="c"></canvas><div id="labels"></div></div>
 
 <div id="topbar">
-  <div class="tb brand"><img class="brand-logo" src="./LogoAO.png" alt="Logo AO"><i class="ph ph-film-slate"></i><span class="brand-title">Blockout Director</span></div>
+  <div class="tb brand"><img class="brand-logo" src="./Slate/LogoAO.png" alt="Logo AO"><i class="ph ph-film-slate"></i><span class="brand-title">Blockout Director</span></div>
   <div class="tb history-menu">
-    <button class="btn" id="btnUndo" title="Deshacer (Ctrl+Z)"><i class="ph ph-arrow-counter-clockwise"></i></button>
-    <button class="btn" id="btnRedo" title="Rehacer (Ctrl+Y)"><i class="ph ph-arrow-clockwise"></i></button>
+    <button class="btn" id="btnUndo" data-i18n-title title="Deshacer (Ctrl+Z)"><i class="ph ph-arrow-counter-clockwise"></i></button>
+    <button class="btn" id="btnRedo" data-i18n-title title="Rehacer (Ctrl+Y)"><i class="ph ph-arrow-clockwise"></i></button>
   </div>
   <div class="tb seg" id="toolSeg">
-    <button class="btn active" data-tool="translate" title="Mover (W)"><i class="ph ph-arrows-out-cardinal"></i> Mover</button>
-    <button class="btn" data-tool="rotate" title="Rotar (E)"><i class="ph ph-arrows-clockwise"></i> Rotar</button>
-    <button class="btn" data-tool="scale" title="Escalar (R)"><i class="ph ph-arrows-out-simple"></i> Escalar</button>
+    <button class="btn active" data-tool="translate" data-i18n data-i18n-title title="Mover (W)"><i class="ph ph-arrows-out-cardinal"></i> Mover</button>
+    <button class="btn" data-tool="rotate" data-i18n data-i18n-title title="Rotar (E)"><i class="ph ph-arrows-clockwise"></i> Rotar</button>
+    <button class="btn" data-tool="scale" data-i18n data-i18n-title title="Escalar (R)"><i class="ph ph-arrows-out-simple"></i> Escalar</button>
   </div>
   <div class="tb shot-menu">
-    <button class="btn primary" id="btnCapture" title="Capturar fotograma de la vista actual"><i class="ph ph-camera"></i> Capturar</button>
-    <button class="btn" id="btnShot"><i class="ph ph-film-slate"></i> Guardar toma</button>
-    <button class="btn" id="btnTimeline"><i class="ph ph-path"></i> Trayectoria</button>
+    <button class="btn primary" id="btnCapture" data-i18n data-i18n-title title="Capturar fotograma de la vista actual"><i class="ph ph-camera"></i> Capturar</button>
+    <button class="btn" id="btnShot" data-i18n><i class="ph ph-film-slate"></i> Guardar toma</button>
+    <button class="btn" id="btnTimeline" data-i18n><i class="ph ph-path"></i> Trayectoria</button>
   </div>
   <div class="tb file-menu">
-    <button class="btn" id="btnNew" title="Nueva escena"><i class="ph ph-file"></i><span class="btn-label">Nueva</span></button>
-    <button class="btn" id="btnSave" title="Guardar en navegador"><i class="ph ph-floppy-disk"></i><span class="btn-label">Guardar</span></button>
-    <button class="btn" id="btnOpen" title="Abrir escena guardada"><i class="ph ph-folder-open"></i><span class="btn-label">Abrir</span></button>
-    <button class="btn" id="btnExport" title="Exportar JSON"><i class="ph ph-export"></i><span class="btn-label">Exportar</span></button>
-    <button class="btn" id="btnImport" title="Importar JSON"><i class="ph ph-download-simple"></i><span class="btn-label">Importar</span></button>
-    <button class="btn" id="btnGuide" title="Guía rápida"><i class="ph ph-question"></i><span class="btn-label">Guía</span></button>
+    <button class="btn" id="btnProjects" data-i18n-title title="Proyectos guardados"><i class="ph ph-squares-four"></i><span class="btn-label" data-i18n>Proyectos</span></button>
+    <button class="btn" id="btnNew" data-i18n-title title="Nueva escena"><i class="ph ph-file"></i><span class="btn-label" data-i18n>Nueva</span></button>
+    <button class="btn" id="btnSave" data-i18n-title title="Guardar en navegador"><i class="ph ph-floppy-disk"></i><span class="btn-label" data-i18n>Guardar</span></button>
+    <button class="btn" id="btnOpen" data-i18n-title title="Abrir escena guardada"><i class="ph ph-folder-open"></i><span class="btn-label" data-i18n>Abrir</span></button>
+    <button class="btn" id="btnExport" data-i18n-title title="Exportar JSON"><i class="ph ph-export"></i><span class="btn-label" data-i18n>Exportar</span></button>
+    <button class="btn" id="btnImport" data-i18n-title title="Importar JSON"><i class="ph ph-download-simple"></i><span class="btn-label" data-i18n>Importar</span></button>
+    <button class="btn" id="btnGuide" data-i18n-title title="Guía rápida"><i class="ph ph-question"></i><span class="btn-label" data-i18n>Guía</span></button>
+  </div>
+  <div class="tb lang-menu">
+    <button class="btn" id="btnLang" data-i18n-title title="Cambiar idioma (ES/EN)"><i class="ph ph-globe"></i> <span id="langLabel">EN</span></button>
   </div>
 </div>
 
 <aside id="leftPanel">
   <div class="card closed" id="cardScene">
-    <div class="hd"><i class="ph ph-film-strip"></i> Escena <span class="chev">v</span></div>
+    <div class="hd" data-i18n><i class="ph ph-film-strip"></i> Escena <span class="chev">v</span></div>
     <div class="bd">
-      <div class="lbl">Nombre</div>
-      <input type="text" id="inpSceneName" placeholder="Nombre de la escena">
-      <div class="lbl">Descripción</div>
-      <textarea id="inpSceneDesc" rows="3" placeholder="Descripción de la escena (se usa en los prompts generados)"></textarea>
+      <div class="lbl" data-i18n>Nombre</div>
+      <input type="text" id="inpSceneName" data-i18n-ph placeholder="Nombre de la escena">
+      <div class="lbl" data-i18n>Descripción</div>
+      <textarea id="inpSceneDesc" rows="3" data-i18n-ph placeholder="Descripción de la escena (se usa en los prompts generados)"></textarea>
     </div>
   </div>
 
   <div class="card closed" id="cardEnv">
-    <div class="hd"><i class="ph ph-mountains"></i> Entorno e iluminación <span class="chev">v</span></div>
+    <div class="hd" data-i18n><i class="ph ph-mountains"></i> Entorno e iluminación <span class="chev">v</span></div>
     <div class="bd">
-      <div class="lbl">Skybox</div>
+      <div class="lbl" data-i18n>Skybox</div>
       <div id="skyChips" class="chips"></div>
-      <div class="row"><label style="width:52px">Suelo</label><select id="selFloor"></select></div>
+      <div class="row"><label style="width:52px" data-i18n>Suelo</label><select id="selFloor"></select></div>
       <div class="row">
         <label class="ck"><input type="checkbox" id="chkGrid" checked> Grid</label>
-        <label class="ck"><input type="checkbox" id="chkShadows" checked> Sombras</label>
-        <label class="ck"><input type="checkbox" id="chkFog"> Niebla</label>
-        <label class="ck"><input type="checkbox" id="chkLabels" checked> Etiquetas</label>
+        <label class="ck" data-i18n><input type="checkbox" id="chkShadows" checked> Sombras</label>
+        <label class="ck" data-i18n><input type="checkbox" id="chkFog"> Niebla</label>
+        <label class="ck" data-i18n><input type="checkbox" id="chkLabels" checked> Etiquetas</label>
       </div>
-      <div class="row"><label style="width:66px">Sol</label><input type="range" id="rngSun" min="0" max="8" step="0.1"><input type="color" id="colSun"></div>
-      <div class="row"><label style="width:66px">Altura sol</label><input type="range" id="rngSunElev" min="5" max="89" step="1"></div>
-      <div class="row"><label style="width:66px">Giro sol</label><input type="range" id="rngSunAzim" min="0" max="360" step="1"></div>
-      <div class="row"><label style="width:66px">Ambiente</label><input type="range" id="rngAmb" min="0" max="3" step="0.05"><input type="color" id="colAmb"></div>
+      <div class="row"><label style="width:66px" data-i18n>Sol</label><input type="range" id="rngSun" min="0" max="8" step="0.1"><input type="color" id="colSun"></div>
+      <div class="row"><label style="width:66px" data-i18n>Altura sol</label><input type="range" id="rngSunElev" min="5" max="89" step="1"></div>
+      <div class="row"><label style="width:66px" data-i18n>Giro sol</label><input type="range" id="rngSunAzim" min="0" max="360" step="1"></div>
+      <div class="row"><label style="width:66px" data-i18n>Ambiente</label><input type="range" id="rngAmb" min="0" max="3" step="0.05"><input type="color" id="colAmb"></div>
     </div>
   </div>
 
   <div class="card" id="cardChars">
-    <div class="hd"><i class="ph ph-person"></i> Personajes <span class="chev">v</span></div>
+    <div class="hd" data-i18n><i class="ph ph-person"></i> Personajes <span class="chev">v</span></div>
     <div class="bd">
       <div class="grid2">
-        <button class="btn outline" id="btnAddChar"><i class="ph ph-user-plus"></i> Personaje</button>
-        <button class="btn outline" id="btnAddMan"><i class="ph ph-person-simple"></i> Maniquí</button>
+        <button class="btn outline" id="btnAddChar" data-i18n><i class="ph ph-user-plus"></i> Personaje</button>
+        <button class="btn outline" id="btnAddMan" data-i18n><i class="ph ph-person-simple"></i> Maniquí</button>
       </div>
-      <button class="btn outline w100" id="btnGlbChar" style="margin-top:6px" title="Importar un .glb y usarlo como modelo de personaje por defecto"><i class="ph ph-package"></i> Cambiar modelo (GLB)...</button>
+      <button class="btn outline w100" id="btnGlbChar" style="margin-top:6px" data-i18n data-i18n-title title="Importar un .glb y usarlo como modelo de personaje por defecto"><i class="ph ph-package"></i> Cambiar modelo (GLB)...</button>
       <div class="hint" id="charModelHint"></div>
       <div id="charList"></div>
     </div>
   </div>
 
   <div class="card" id="cardProps">
-    <div class="hd"><i class="ph ph-cube"></i> Props y objetos <span class="chev">v</span></div>
+    <div class="hd" data-i18n><i class="ph ph-cube"></i> Props y objetos <span class="chev">v</span></div>
     <div class="bd">
       <div class="grid3" id="propBtns"></div>
-      <button class="btn outline w100" id="btnGlbProp" style="margin-top:6px"><i class="ph ph-package"></i> Importar GLB</button>
+      <button class="btn outline w100" id="btnGlbProp" style="margin-top:6px" data-i18n><i class="ph ph-package"></i> Importar GLB</button>
       <div id="propList"></div>
     </div>
   </div>
 
   <div class="card" id="cardShots">
-    <div class="hd"><i class="ph ph-film-slate"></i> Tomas <span class="chev">v</span></div>
+    <div class="hd" data-i18n><i class="ph ph-film-slate"></i> Tomas <span class="chev">v</span></div>
     <div class="bd">
       <div id="shotList"></div>
     </div>
   </div>
 
   <div class="card" id="cardCaps">
-    <div class="hd"><i class="ph ph-camera"></i> Capturas <span class="chev">v</span></div>
+    <div class="hd" data-i18n><i class="ph ph-camera"></i> Capturas <span class="chev">v</span></div>
     <div class="bd">
       <div id="capList"></div>
     </div>
@@ -118,37 +122,67 @@
 </aside>
 
 <div id="perspPanel" class="card">
-  <div class="hd"><i class="ph ph-video-camera"></i> Perspectivas <button class="btn mini2" id="btnAddCam" title="Crear cámara desde la vista actual"><i class="ph ph-plus"></i></button></div>
+  <div class="hd" data-i18n><i class="ph ph-video-camera"></i> Perspectivas <button class="btn mini2" id="btnAddCam" data-i18n-title title="Crear cámara desde la vista actual"><i class="ph ph-plus"></i></button></div>
   <div class="bd" id="perspList"></div>
 </div>
 
 <div id="pipPanel" class="card">
-  <div class="hd"><i class="ph ph-monitor-play"></i> <select id="pipSelect"></select><span class="hint" style="margin:0;flex-shrink:0">Preview final</span></div>
+  <div class="hd"><i class="ph ph-monitor-play"></i> <select id="pipSelect"></select><span class="hint" style="margin:0;flex-shrink:0" data-i18n>Preview final</span></div>
   <canvas id="pip" width="728" height="410"></canvas>
 </div>
 
 <div id="timelinePanel" class="card hidden">
-  <div class="hd"><i class="ph ph-path"></i> Trayectoria de cámara
-    <select id="tlCam" style="width:150px;margin-left:8px"></select>
+  <div class="hd" data-i18n><i class="ph ph-path"></i> Trayectorias
+    <select id="tlCam" style="width:170px;margin-left:8px"></select>
     <select id="tlInterp" style="width:150px"></select>
     <button class="btn" id="tlClose" style="margin-left:auto"><i class="ph ph-x"></i></button>
   </div>
   <div class="bd">
     <div class="row">
-      <button class="btn outline" id="tlPlay" title="Reproducir / pausar"><i class="ph ph-play"></i></button>
-      <button class="btn outline" id="tlStop" title="Detener y volver al inicio"><i class="ph ph-stop"></i></button>
+      <button class="btn outline" id="tlPlay" data-i18n-title title="Reproducir / pausar (anima todo lo que tenga keyframes)"><i class="ph ph-play"></i></button>
+      <button class="btn outline" id="tlStop" data-i18n-title title="Detener y volver al inicio"><i class="ph ph-stop"></i></button>
       <input type="range" id="tlScrub" min="0" max="10" step="0.01" value="0">
       <span id="tlTime" class="hint" style="margin:0;width:92px;text-align:right">0.0 / 0.0 s</span>
-      <label class="ck"><input type="checkbox" id="tlLoop"> Loop</label>
-      <button class="btn outline" id="tlCap" title="Capturar fotograma en este punto"><i class="ph ph-camera"></i></button>
+      <label class="ck" data-i18n><input type="checkbox" id="tlLoop"> Loop</label>
+      <button class="btn outline" id="tlCap" data-i18n-title title="Capturar fotograma en este punto"><i class="ph ph-camera"></i></button>
+      <button class="btn outline" id="tlVideo" data-i18n-title title="Exportar video WebM de la trayectoria"><i class="ph ph-film-reel"></i></button>
     </div>
     <div class="row" style="flex-wrap:wrap" id="tlKfs"></div>
     <div class="row">
       <label>t =</label>
       <input type="number" id="tlKfTime" value="0" min="0" step="0.5" style="width:74px">
       <span>s</span>
-      <button class="btn outline" id="tlAddKf"><i class="ph ph-plus"></i> Keyframe aquí</button>
-      <span class="hint" style="margin:0">Cada keyframe guarda posición, rotación y FOV de la cámara.</span>
+      <button class="btn outline" id="tlAddKf" data-i18n><i class="ph ph-plus"></i> Keyframe aquí</button>
+      <span class="hint" style="margin:0" id="tlKfHint"></span>
+    </div>
+  </div>
+</div>
+
+<div id="launcher" class="hidden">
+  <div class="lc-card">
+    <div class="lc-head">
+      <img class="brand-logo" src="./Slate/LogoAO.png" alt="Logo AO">
+      <div class="lc-title">Blockout Director<span class="hint" data-i18n>Consola de dirección 3D</span></div>
+      <button class="btn outline" id="lcLang"><i class="ph ph-globe"></i> <span id="lcLangLabel">EN</span></button>
+    </div>
+    <div class="lc-actions">
+      <button class="btn primary" id="lcNew"><i class="ph ph-plus"></i> <span data-i18n>Nuevo proyecto</span></button>
+      <button class="btn outline" id="lcSample"><i class="ph ph-magic-wand"></i> <span data-i18n>Escena de ejemplo</span></button>
+      <button class="btn outline" id="lcImport"><i class="ph ph-download-simple"></i> <span data-i18n>Importar archivo...</span></button>
+      <button class="btn outline" id="lcContinue" style="margin-left:auto"><span data-i18n>Ir a la escena</span> <i class="ph ph-arrow-right"></i></button>
+    </div>
+    <div class="lbl" data-i18n>Proyectos guardados en este navegador</div>
+    <div class="lc-grid" id="lcGrid"></div>
+  </div>
+</div>
+
+<div id="vidOverlay" class="hidden">
+  <div class="card vid-card">
+    <div class="hd"><i class="ph ph-film-reel"></i> <span data-i18n>Exportando video...</span></div>
+    <div class="bd">
+      <div class="vid-bar"><div class="vid-fill" id="vidFill"></div></div>
+      <div class="hint" id="vidInfo" style="text-align:center"></div>
+      <button class="btn outline w100" id="vidCancel" style="margin-top:10px" data-i18n>Cancelar</button>
     </div>
   </div>
 </div>
