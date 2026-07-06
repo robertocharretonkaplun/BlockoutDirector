@@ -7,6 +7,53 @@ y el proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
 
 ---
 
+## [0.8.0] - 2026-07-06
+
+### Añadido
+- **Controles de fotografía en el inspector de cámara**: selector de **objetivo**
+  (14/24/35/50/85/135 mm, sincronizado en ambos sentidos con el deslizador de
+  FOV y mostrado también en la etiqueta 3D de cada cámara), **encuadre** por
+  cámara (16:9, 9:16 vertical, 2.39:1 cinemascope y 1:1) y conmutador de
+  **regla de tercios**. Nuevo botón «Copiar prompt de la toma» que copia el
+  prompt de la cámara sin pasar por «Guardar toma».
+- **Guías de encuadre en el viewport**: al mirar por una cámara, la zona que
+  realmente captura su encuadre se marca con un recuadro y máscara oscura
+  (letterbox/pillarbox) y, si la regla de tercios está activa, con sus líneas.
+  El preview final (PiP) también respeta el encuadre y muestra los tercios.
+- **El encuadre viaja por todo el pipeline**: capturas JPG, miniaturas de tomas
+  y proyectos, y el video WebM exportado se generan con la relación de aspecto
+  de la cámara (p. ej. 900x1600 en 9:16, 1600x669 en 2.39:1). El objetivo (mm)
+  y el encuadre se incluyen en los prompts generados y se guardan/exportan con
+  la escena (compatible con escenas antiguas, que quedan en 16:9).
+- **Jerarquía + editor de keyframes en Trayectorias** (estilo dope sheet): el
+  panel muestra todas las entidades agrupadas (Cámaras / Personajes / Props)
+  con contador de keyframes, y cada fila tiene una pista con sus keyframes como
+  marcadores en el tiempo (azul cámaras, ámbar objetos) y una línea de
+  reproducción sincronizada con el scrub. Clic en un marcador salta a ese
+  instante; clic derecho lo elimina; clic en el nombre selecciona la entidad en
+  la escena (y viceversa: seleccionar en el viewport activa su fila). Un botón
+  en la cabecera **activa/desactiva el editor de keyframes**, dejando solo la
+  jerarquía.
+
+### Cambiado
+- **Layout acoplado estilo editor de motor de juego (UE)**: los paneles ya no
+  flotan sobre el lienzo ni se superponen entre sí. El viewport 3D es un panel
+  central que **se redimensiona** al hueco disponible; dock izquierdo (escena,
+  entorno, personajes, props, tomas, capturas), dock derecho (Perspectivas +
+  Propiedades con scroll + Preview final anclado abajo) y el panel de
+  Trayectorias como **dock inferior** que empuja el viewport al abrirse (y se
+  encoge al ocultar el editor de keyframes). La barra superior puede ocupar una
+  o dos filas y los docks la siguen automáticamente. Selección por clic,
+  etiquetas flotantes y guías de encuadre usan ahora coordenadas del viewport;
+  toasts y HUD de vuelo se centran sobre el viewport. Escala de z-index
+  documentada en la hoja de estilos.
+- El selector de entidad del timeline se sustituye por la jerarquía con pistas;
+  la fila de chips de keyframes de la entidad activa se conserva bajo la pista.
+- La guía rápida documenta objetivo/encuadre/regla de tercios y el nuevo panel
+  de trayectorias.
+
+---
+
 ## [0.7.0] - 2026-07-03
 
 ### Añadido

@@ -306,7 +306,7 @@ function findEnt(id) {
   return R.characters.find(c => c.id === id) || R.props.find(p => p.id === id) || R.cameras.find(c => c.id === id) || null;
 }
 function pick(e) {
-  const ndc = new THREE.Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  const ndc = new THREE.Vector2(((e.clientX - VP.left) / VP.w) * 2 - 1, -((e.clientY - VP.top) / VP.h) * 2 + 1);
   ray.setFromCamera(ndc, viewCam);
   const hits = ray.intersectObjects(scene.children, true);
   for (const h of hits) {
@@ -337,8 +337,8 @@ function updateLabels() {
       let d = labelPool.get(id);
       if (!d) { d = document.createElement('div'); d.className = 'label3d' + (cls ? ' ' + cls : ''); labelsEl.appendChild(d); labelPool.set(id, d); }
       if (d.textContent !== text) d.textContent = text;
-      d.style.left = ((_lv.x * 0.5 + 0.5) * innerWidth) + 'px';
-      d.style.top = ((-_lv.y * 0.5 + 0.5) * innerHeight) + 'px';
+      d.style.left = ((_lv.x * 0.5 + 0.5) * VP.w) + 'px';
+      d.style.top = ((-_lv.y * 0.5 + 0.5) * VP.h) + 'px';
       used.add(id);
     };
     for (const c of R.characters) {
@@ -348,7 +348,7 @@ function updateLabels() {
     for (const c of R.cameras) {
       if (viewCam === c.cam) continue;
       const p = c.cam.position;
-      place(c.id, `${c.name} · ${Math.round(c.cam.fov)}°`, p.x, p.y + 0.3, p.z, 'camlbl');
+      place(c.id, `${c.name} · ${Math.round(c.cam.getFocalLength())}mm`, p.x, p.y + 0.3, p.z, 'camlbl');
     }
   }
   for (const [id, d] of labelPool) if (!used.has(id)) { d.remove(); labelPool.delete(id); }
@@ -396,20 +396,46 @@ function animate() {
     if (activeCamEnt) {
       if (activeCamEnt.viz.visible) { activeCamEnt.viz.visible = false; hidden.push(activeCamEnt.viz); }
     }
-    const pa = viewCam.aspect;
-    viewCam.aspect = innerWidth / innerHeight; viewCam.updateProjectionMatrix();
+    // encaja el encuadre completo de la cámara (según su relación de aspecto)
+    // dentro del viewport; las guías de encuadre marcan la zona capturada
+    const winA = VP.w / VP.h;
+    const r = camRatioVal(activeCamEnt);
+    const pa = viewCam.aspect, pf = viewCam.fov;
+    if (winA < r) viewCam.fov = RAD(2 * Math.atan(Math.tan(DEG(pf) / 2) * r / winA));
+    viewCam.aspect = winA; viewCam.updateProjectionMatrix();
     renderer.render(scene, viewCam);
-    viewCam.aspect = pa; viewCam.updateProjectionMatrix();
+    viewCam.aspect = pa; viewCam.fov = pf; viewCam.updateProjectionMatrix();
     for (const o of hidden) o.visible = true;
   }
   renderPip();
 }
 
-addEventListener('resize', () => {
-  renderer.setSize(innerWidth, innerHeight);
-  freeCam.aspect = innerWidth / innerHeight;
+// ---------- layout acoplado ----------
+// El lienzo 3D ocupa el hueco central entre los docks (izquierda, derecha,
+// barra superior y panel de trayectorias); nada se dibuja debajo de un panel.
+const vpEl = $('viewport');
+const VP = { w: innerWidth, h: innerHeight, left: 0, top: 0 };
+function layoutViewport() {
+  const r = vpEl.getBoundingClientRect();
+  VP.w = Math.max(1, Math.round(r.width));
+  VP.h = Math.max(1, Math.round(r.height));
+  VP.left = r.left; VP.top = r.top;
+  renderer.setSize(VP.w, VP.h);
+  freeCam.aspect = VP.w / VP.h;
   freeCam.updateProjectionMatrix();
-});
+  updateFrameGuides();
+}
+addEventListener('resize', layoutViewport);
+new ResizeObserver(layoutViewport).observe(vpEl);
+// la barra superior puede ocupar 1 o 2 filas según el ancho: los docks la siguen
+new ResizeObserver(() => {
+  document.documentElement.style.setProperty('--tb-h', ($('topbar').offsetHeight + 20) + 'px');
+}).observe($('topbar'));
+// el panel de trayectorias actúa como dock inferior: su alto empuja el viewport
+new ResizeObserver(() => {
+  const h = $('timelinePanel').offsetHeight;
+  document.documentElement.style.setProperty('--tl-h', h > 0 ? (h + 10) + 'px' : '0px');
+}).observe($('timelinePanel'));
 
 // ---------- atajos de teclado ----------
 addEventListener('keydown', e => {
@@ -1071,6 +1097,8 @@ function setSelected(ent) {
   if (ent) { tc.attach(ent.root); renderInspector(); }
   else $('rightPanel').classList.add('hidden');
   renderCharList(); renderPropList(); renderPersp();
+  // con el editor de trayectorias abierto, la selección sincroniza la entidad activa
+  if (ent && tlEnt !== ent && !$('timelinePanel').classList.contains('hidden')) { tlEnt = ent; refreshKfs(); }
 }
 
 // ---------- listas del panel izquierdo ----------
@@ -1257,7 +1285,12 @@ function renderInspector() {
 
   if (ent.kind === 'camera') {
     html += `
-    <div class="row"><label>FOV</label><input type="range" id="inspFov" min="15" max="110" step="1" value="${ent.cam.fov}"><span id="inspFovV" class="hint" style="margin:0;width:34px;text-align:right">${Math.round(ent.cam.fov)}°</span></div>
+    <div class="lbl">${t('Objetivo')} <span class="lbl-val" id="inspMm">≈ ${Math.round(ent.cam.getFocalLength())} mm</span></div>
+    <div class="chips" id="lensChips">${LENSES.map(l => `<button class="chip" data-mm="${l}">${l}mm</button>`).join('')}</div>
+    <div class="row"><label>FOV</label><input type="range" id="inspFov" min="5" max="115" step="1" value="${Math.round(ent.cam.fov)}"><span id="inspFovV" class="hint" style="margin:0;width:34px;text-align:right">${Math.round(ent.cam.fov)}°</span></div>
+    <div class="lbl">${t('Encuadre')}</div>
+    <div class="chips" id="ratioChips">${Object.keys(RATIOS).map(k => `<button class="chip ${ent.ratio === k ? 'active' : ''}" data-ratio="${k}">${k}</button>`).join('')}</div>
+    <label class="ck" style="margin-top:9px"><input type="checkbox" id="inspThirds" ${ent.thirds ? 'checked' : ''}> ${t('Regla de tercios')}</label>
     <div class="lbl">${t('Tipo de plano')}</div>
     <select id="inspShotType">${SHOT_TYPES.map(st => `<option value="${escapeHtml(st)}" ${st === ent.shotType ? 'selected' : ''}>${escapeHtml(t(st))}</option>`).join('')}</select>
     <div class="grid2">
@@ -1265,7 +1298,8 @@ function renderInspector() {
       <button class="btn outline" id="btnCamFree">${t('Vista libre')}</button>
       <button class="btn outline" id="btnCamCap">${t('Capturar')}</button>
       <button class="btn outline" id="btnCamPath">${t('Trayectoria')}</button>
-    </div>`;
+    </div>
+    <button class="btn outline w100" id="btnCamPrompt" style="margin-top:8px"><i class="ph ph-copy"></i> ${t('Copiar prompt de la toma')}</button>`;
   }
 
   html += transformBlockHTML(ent);
@@ -1282,7 +1316,7 @@ function renderInspector() {
   // enlaces comunes
   $('inspName').addEventListener('change', e => {
     ent.name = e.target.value || ent.name;
-    renderCharList(); renderPropList(); renderPersp(); refreshTlCams(); refreshPipSelect();
+    renderCharList(); renderPropList(); renderPersp(); refreshKfs(); refreshPipSelect();
   });
   bindTransformInputs(ent);
   $('btnDup').onclick = () => duplicateEnt(ent);
@@ -1343,17 +1377,48 @@ function renderInspector() {
     }
   }
   if (ent.kind === 'camera') {
+    const syncLensUI = () => {
+      const mm = ent.cam.getFocalLength();
+      $('inspMm').textContent = `≈ ${Math.round(mm)} mm`;
+      document.querySelectorAll('#lensChips .chip').forEach(ch =>
+        ch.classList.toggle('active', Math.abs(+ch.dataset.mm - mm) < Math.max(0.6, +ch.dataset.mm * 0.03)));
+      if (document.activeElement !== $('inspFov')) $('inspFov').value = Math.round(ent.cam.fov);
+      $('inspFovV').textContent = Math.round(ent.cam.fov) + '°';
+    };
+    document.querySelectorAll('#lensChips .chip').forEach(ch => ch.onclick = () => {
+      pushUndo();
+      ent.cam.setFocalLength(+ch.dataset.mm);
+      updateFrustumViz(ent);
+      syncLensUI();
+    });
     $('inspFov').addEventListener('pointerdown', () => pushUndo());
     $('inspFov').addEventListener('input', e => {
       ent.cam.fov = +e.target.value; ent.cam.updateProjectionMatrix();
       updateFrustumViz(ent);
-      $('inspFovV').textContent = e.target.value + '°';
+      syncLensUI();
+    });
+    document.querySelectorAll('#ratioChips .chip').forEach(ch => ch.onclick = () => {
+      pushUndo();
+      ent.ratio = ch.dataset.ratio;
+      ent.cam.aspect = camRatioVal(ent);
+      ent.cam.updateProjectionMatrix();
+      updateFrustumViz(ent);
+      updateFrameGuides(); updatePipGuides();
+      document.querySelectorAll('#ratioChips .chip').forEach(c2 => c2.classList.toggle('active', c2 === ch));
+      syncLensUI();
+    });
+    $('inspThirds').addEventListener('change', e => {
+      pushUndo();
+      ent.thirds = e.target.checked;
+      updateFrameGuides(); updatePipGuides();
     });
     $('inspShotType').addEventListener('change', e => { pushUndo(); ent.shotType = e.target.value; });
     $('btnCamView').onclick = () => setViewCamera(ent);
     $('btnCamFree').onclick = () => setViewCamera(null);
     $('btnCamCap').onclick = () => captureFrame(ent);
     $('btnCamPath').onclick = () => openTimeline(ent);
+    $('btnCamPrompt').onclick = () => copyText(generatePrompt(ent, ent.shotType, ''));
+    syncLensUI();
   }
 }
 
@@ -1375,7 +1440,7 @@ function deleteEnt(ent, noUndo) {
     const i = arr.indexOf(ent); if (i >= 0) arr.splice(i, 1);
     if (tlEnt === ent) { tlEnt = null; refreshKfs(); }
   }
-  renderCharList(); renderPropList(); renderPersp(); refreshTlCams(); refreshPipSelect();
+  renderCharList(); renderPropList(); renderPersp(); refreshKfs(); refreshPipSelect();
 }
 function duplicateEnt(ent) {
   pushUndo();
@@ -1422,8 +1487,14 @@ function duplicateEnt(ent) {
 let camCounter = 0;
 let pipEnt = null;
 
+// objetivos (mm sobre película 35mm, el filmGauge de three.js) y encuadres disponibles
+const LENSES = [14, 24, 35, 50, 85, 135];
+const RATIOS = { '16:9': 16 / 9, '9:16': 9 / 16, '2.39:1': 2.39, '1:1': 1 };
+function camRatioVal(ent) { return (ent && RATIOS[ent.ratio]) || 16 / 9; }
+
 const pipRenderer = new THREE.WebGLRenderer({ canvas: $('pip'), antialias: true });
 pipRenderer.setSize(728, 410, false);
+pipRenderer.setClearColor(0x0e0f13, 1);
 pipRenderer.outputColorSpace = THREE.SRGBColorSpace;
 pipRenderer.toneMapping = THREE.ACESFilmicToneMapping;
 pipRenderer.toneMappingExposure = 1.05;
@@ -1443,7 +1514,7 @@ function frustumLinesGeo(fov, aspect, d) {
 function updateFrustumViz(ent) {
   const old = ent.frustum;
   const line = new THREE.LineSegments(
-    frustumLinesGeo(ent.cam.fov, 16 / 9, 2.4),
+    frustumLinesGeo(ent.cam.fov, camRatioVal(ent), 2.4),
     new THREE.LineDashedMaterial({ color: 0x3a6df0, dashSize: 0.1, gapSize: 0.07, transparent: true, opacity: 0.85 })
   );
   line.computeLineDistances();
@@ -1502,7 +1573,8 @@ function buildCameraViz() {
 
 function addCamera(opts = {}) {
   if (!opts.noUndo) pushUndo();
-  const cam = new THREE.PerspectiveCamera(opts.fov || 40, 16 / 9, 0.1, 600);
+  const ratio = RATIOS[opts.ratio] ? opts.ratio : '16:9';
+  const cam = new THREE.PerspectiveCamera(opts.fov || 40, RATIOS[ratio], 0.1, 600);
   const id = opts.id || uid('cam');
   const viz = buildCameraViz();
   cam.add(viz);
@@ -1511,6 +1583,7 @@ function addCamera(opts = {}) {
     kind: 'camera', id, cam, viz, frustum: null,
     name: opts.name || `${t('Cámara')} ${++camCounter}`,
     shotType: opts.shotType || 'Plano general',
+    ratio, thirds: opts.thirds !== false,
     path: opts.path || { interpolation: 'catmullrom', keyframes: [] },
     pathViz: null, ringScale: 0.7, root: cam
   };
@@ -1525,13 +1598,14 @@ function addCamera(opts = {}) {
   if (ent.frustum) ent.frustum.userData.noPick = true;
   R.cameras.push(ent);
   updatePathViz(ent);
-  renderPersp(); refreshPipSelect(); refreshTlCams();
+  renderPersp(); refreshPipSelect(); refreshKfs();
   if (!pipEnt) setPipEnt(ent);
   if (!opts.noSelect) setSelected(ent);
   return ent;
 }
 function duplicateCamera(ent) {
   const n = addCamera({ noUndo: true, name: ent.name + ' ' + t('copia'), fov: ent.cam.fov, shotType: ent.shotType,
+    ratio: ent.ratio, thirds: ent.thirds,
     pos: v3(ent.cam.position), rot: eDeg(ent.cam.rotation),
     path: JSON.parse(JSON.stringify(ent.path)) });
   updatePathViz(n);
@@ -1546,7 +1620,7 @@ function removeCameraEnt(ent) {
   const i = R.cameras.indexOf(ent); if (i >= 0) R.cameras.splice(i, 1);
   if (!pipEnt && R.cameras.length) setPipEnt(R.cameras[0]);
   refreshPipSelect();
-  if (tlEnt === ent) { tlEnt = R.cameras[0] || null; refreshTlCams(); refreshKfs(); }
+  if (tlEnt === ent) { tlEnt = R.cameras[0] || null; refreshKfs(); }
 }
 
 // ---------- cambiar la vista principal ----------
@@ -1566,6 +1640,36 @@ function setViewCamera(ent) {
   tc.camera = viewCam;
   controls.update();
   renderPersp();
+  updateFrameGuides();
+}
+
+// ---------- guías de encuadre y regla de tercios ----------
+function updateFrameGuides() {
+  const g = $('frameGuides');
+  if (!activeCamEnt || viewCam === freeCam) { g.classList.add('hidden'); return; }
+  const winA = VP.w / VP.h, r = camRatioVal(activeCamEnt);
+  const fw = winA >= r ? r / winA : 1;
+  const fh = winA >= r ? 1 : winA / r;
+  const f = $('fgFrame');
+  f.style.width = (fw * 100).toFixed(3) + '%';
+  f.style.height = (fh * 100).toFixed(3) + '%';
+  f.style.left = ((1 - fw) * 50).toFixed(3) + '%';
+  f.style.top = ((1 - fh) * 50).toFixed(3) + '%';
+  g.classList.toggle('no-thirds', !activeCamEnt.thirds);
+  g.classList.remove('hidden');
+}
+function updatePipGuides() {
+  const g = $('pipGuides');
+  if (!pipEnt) { g.classList.add('hidden'); return; }
+  const r = camRatioVal(pipEnt), boxA = 728 / 410;
+  const fw = r >= boxA ? 1 : r / boxA;
+  const fh = r >= boxA ? boxA / r : 1;
+  g.style.width = (fw * 100).toFixed(3) + '%';
+  g.style.height = (fh * 100).toFixed(3) + '%';
+  g.style.left = ((1 - fw) * 50).toFixed(3) + '%';
+  g.style.top = ((1 - fh) * 50).toFixed(3) + '%';
+  g.classList.toggle('no-thirds', !pipEnt.thirds);
+  g.classList.remove('hidden');
 }
 
 // ---------- panel de perspectivas ----------
@@ -1596,16 +1700,26 @@ function refreshPipSelect() {
   const sel = $('pipSelect');
   sel.innerHTML = R.cameras.map(c => `<option value="${c.id}" ${pipEnt === c ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('');
   if (!R.cameras.length) sel.innerHTML = `<option value="">${t('-- sin camaras --')}</option>`;
+  updatePipGuides();
 }
 $('pipSelect').addEventListener('change', e => {
   pipEnt = R.cameras.find(c => c.id === e.target.value) || null;
+  updatePipGuides();
 });
 function renderPip() {
-  if (!pipEnt) {
-    pipRenderer.clear();
-    return;
-  }
-  cleanRender(pipRenderer, pipEnt.cam, 16, 9);
+  pipRenderer.setScissorTest(false);
+  pipRenderer.clear();
+  if (!pipEnt) return;
+  // letterbox: el encuadre de la cámara centrado dentro del lienzo 728x410
+  const r = camRatioVal(pipEnt), W = 728, H = 410;
+  let w = W, h = Math.round(W / r);
+  if (h > H) { h = H; w = Math.round(H * r); }
+  const x = (W - w) >> 1, y = (H - h) >> 1;
+  pipRenderer.setViewport(x, y, w, h);
+  pipRenderer.setScissor(x, y, w, h);
+  pipRenderer.setScissorTest(true);
+  cleanRender(pipRenderer, pipEnt.cam, w, h);
+  pipRenderer.setViewport(0, 0, W, H);
 }
 
 /* ============================================================
@@ -1722,29 +1836,83 @@ buildInterpOptions();
 function openTimeline(ent) {
   tlEnt = ent || (selected || null) || activeCamEnt || R.cameras[0] || null;
   $('timelinePanel').classList.remove('hidden');
-  refreshTlCams(); refreshKfs();
+  refreshKfs();
   if (!tlEnt) toast('Crea primero una cámara, personaje o prop para animarlo');
-}
-function refreshTlCams() {
-  if (!tlEnt) tlEnt = R.cameras[0] || null;
-  const groups = [
-    [t('Cámaras'), R.cameras], [t('Personajes'), R.characters], [t('Props'), R.props]
-  ];
-  let html = '';
-  for (const [label, arr] of groups) {
-    if (!arr.length) continue;
-    html += `<optgroup label="${escapeHtml(label)}">` + arr.map(e =>
-      `<option value="${e.id}" ${tlEnt === e ? 'selected' : ''}>${escapeHtml(e.name)}</option>`).join('') + '</optgroup>';
-  }
-  $('tlCam').innerHTML = html || `<option value="">${t('-- sin camaras --')}</option>`;
 }
 function updateScrubMax() { $('tlScrub').max = Math.max(globalDuration(), 1); }
 function tlTimeLabel() {
   $('tlTime').textContent = `${PB.t.toFixed(1)} / ${globalDuration().toFixed(1)} s`;
+  updatePlayhead();
+}
+
+// ---------- jerarquía + pistas de keyframes (estilo dope sheet) ----------
+let tlPlayheads = [];
+function updatePlayhead() {
+  const dur = Math.max(globalDuration(), 0.001);
+  const frac = THREE.MathUtils.clamp(PB.t / dur, 0, 1) * 100;
+  for (const ph of tlPlayheads) ph.style.left = frac + '%';
+}
+function refreshTracks() {
+  const el = $('tlTracks');
+  el.innerHTML = ''; tlPlayheads = [];
+  const dur = Math.max(globalDuration(), 0.001);
+  const groups = [
+    [t('Cámaras'), R.cameras, 'ph-video-camera'],
+    [t('Personajes'), R.characters, 'ph-person'],
+    [t('Props'), R.props, 'ph-cube']
+  ];
+  let any = false;
+  for (const [label, arr, icon] of groups) {
+    if (!arr.length) continue;
+    any = true;
+    const gh = document.createElement('div');
+    gh.className = 'lbl tk-group'; gh.textContent = label;
+    el.appendChild(gh);
+    for (const e of arr) {
+      const kfs = (e.path && e.path.keyframes) || [];
+      const row = document.createElement('div');
+      row.className = 'tk-row' + (tlEnt === e ? ' active' : '');
+      row.innerHTML = `<span class="tk-label"><i class="ph ${icon}"></i><span class="nm">${escapeHtml(e.name)}</span><span class="tk-count">${kfs.length || ''}</span></span><span class="tk-lane"></span>`;
+      const lane = row.querySelector('.tk-lane');
+      kfs.forEach((kf, idx) => {
+        const m = document.createElement('span');
+        m.className = 'kfmark' + (e.kind === 'camera' ? '' : ' obj');
+        m.style.left = (kf.time / dur * 100) + '%';
+        m.title = `t=${kf.time.toFixed(1)}s · ${t('clic: ir · clic derecho: eliminar')}`;
+        m.addEventListener('click', ev => {
+          ev.stopPropagation();
+          stopPB();
+          tlEnt = e;
+          PB.t = kf.time; applyAllPaths(kf.time);
+          $('tlScrub').value = kf.time; tlTimeLabel();
+          refreshKfs();
+        });
+        m.addEventListener('contextmenu', ev => {
+          ev.preventDefault(); ev.stopPropagation();
+          pushUndo();
+          e.path.keyframes.splice(idx, 1);
+          updatePathViz(e);
+          refreshKfs();
+        });
+        lane.appendChild(m);
+      });
+      const ph = document.createElement('span');
+      ph.className = 'lane-ph';
+      lane.appendChild(ph);
+      tlPlayheads.push(ph);
+      row.querySelector('.tk-label').addEventListener('click', () => {
+        tlEnt = e; setSelected(e); refreshKfs();
+      });
+      el.appendChild(row);
+    }
+  }
+  if (!any) el.innerHTML = `<div class="hint" style="margin:2px 0">${t('Sin entidades: crea cámaras, personajes o props.')}</div>`;
+  updatePlayhead();
 }
 function refreshKfs() {
   const el = $('tlKfs'); el.innerHTML = '';
-  if (!tlEnt) { el.innerHTML = `<span class="hint" style="margin:0">${t('Sin entidad seleccionada.')}</span>`; updateScrubMax(); tlTimeLabel(); return; }
+  if (!tlEnt) tlEnt = R.cameras[0] || R.characters[0] || R.props[0] || null;
+  if (!tlEnt) { el.innerHTML = `<span class="hint" style="margin:0">${t('Sin entidad seleccionada.')}</span>`; refreshTracks(); updateScrubMax(); tlTimeLabel(); return; }
   if (!tlEnt.path) tlEnt.path = { interpolation: 'catmullrom', keyframes: [] };
   $('tlInterp').value = tlEnt.path.interpolation;
   $('tlKfHint').textContent = tlEnt.kind === 'camera'
@@ -1765,19 +1933,18 @@ function refreshKfs() {
     };
     el.appendChild(chip);
   });
-  updateScrubMax(); tlTimeLabel();
+  refreshTracks(); updateScrubMax(); tlTimeLabel();
 }
 $('btnTimeline').onclick = () => {
   if ($('timelinePanel').classList.contains('hidden')) openTimeline();
   else { stopPB(); $('timelinePanel').classList.add('hidden'); }
 };
 $('tlClose').onclick = () => { stopPB(); $('timelinePanel').classList.add('hidden'); };
-$('tlCam').addEventListener('change', e => {
-  stopPB();
-  tlEnt = findEnt(e.target.value);
-  PB.t = 0; $('tlScrub').value = 0;
-  refreshKfs();
-});
+// activa/desactiva el editor de keyframes (deja visible solo la jerarquía)
+$('tlToggle').onclick = () => {
+  const off = $('timelinePanel').classList.toggle('kfs-off');
+  $('tlToggle').classList.toggle('active', !off);
+};
 $('tlInterp').addEventListener('change', e => {
   if (!tlEnt) return;
   pushUndo();
@@ -1854,6 +2021,7 @@ function exportVideo() {
     toast('Tu navegador no soporta la grabación de video (MediaRecorder)'); return;
   }
   stopPB();
+  sizeCapCanvas(camRatioVal(camEnt));
   const mime = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']
     .find(m => MediaRecorder.isTypeSupported(m)) || '';
   const stream = capCanvas.captureStream(60);
@@ -1888,7 +2056,7 @@ function exportVideo() {
     const url = URL.createObjectURL(blob);
     download(`${sanitize(sceneName)}_${sanitize(camEnt.name)}.webm`, url);
     setTimeout(() => URL.revokeObjectURL(url), 5000);
-    toast(t('Video exportado ({s} s, 1600x900 WebM)', { s: dur.toFixed(1) }));
+    toast(t('Video exportado ({s} s, {w}x{h} WebM)', { s: dur.toFixed(1), w: capCanvas.width, h: capCanvas.height }));
   };
   rec.start(200);
   const t0 = performance.now();
@@ -1897,12 +2065,12 @@ function exportVideo() {
     const tt = (performance.now() - t0) / 1000;
     if (vidState.cancel || tt >= dur) {
       applyAllPaths(dur);
-      cleanRender(capRenderer, camEnt.cam, 16, 9);
+      cleanRender(capRenderer, camEnt.cam, capCanvas.width, capCanvas.height);
       rec.stop();
       return;
     }
     applyAllPaths(tt);
-    cleanRender(capRenderer, camEnt.cam, 16, 9);
+    cleanRender(capRenderer, camEnt.cam, capCanvas.width, capCanvas.height);
     $('vidFill').style.width = (tt / dur * 100).toFixed(1) + '%';
     $('vidInfo').textContent = `${camEnt.name} · ${tt.toFixed(1)} / ${dur.toFixed(1)} s`;
     requestAnimationFrame(frame);
@@ -1925,10 +2093,28 @@ capRenderer.toneMappingExposure = 1.05;
 capRenderer.shadowMap.enabled = true;
 capRenderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
+// dimensiona el lienzo de captura según el encuadre (lado mayor = 1600 px)
+function sizeCapCanvas(r) {
+  const w = r >= 1 ? 1600 : Math.round(1600 * r);
+  const h = r >= 1 ? Math.round(1600 / r) : 1600;
+  if (capCanvas.width !== w || capCanvas.height !== h) capRenderer.setSize(w, h, false);
+}
 function renderToCapCanvas(camEnt) {
   const cam = camEnt ? camEnt.cam : viewCam;
-  cleanRender(capRenderer, cam, 16, 9);
+  sizeCapCanvas(camEnt ? camRatioVal(camEnt) : 16 / 9);
+  cleanRender(capRenderer, cam, capCanvas.width, capCanvas.height);
   return cam;
+}
+// miniatura 480x270 con letterbox a partir del lienzo de captura
+function thumbFromCap(quality = 0.82) {
+  const c = document.createElement('canvas');
+  c.width = 480; c.height = 270;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#0e0f13'; ctx.fillRect(0, 0, 480, 270);
+  const s = Math.min(480 / capCanvas.width, 270 / capCanvas.height);
+  const w = Math.round(capCanvas.width * s), h = Math.round(capCanvas.height * s);
+  ctx.drawImage(capCanvas, (480 - w) / 2, (270 - h) / 2, w, h);
+  return c.toDataURL('image/jpeg', quality);
 }
 function camDisplayName(camEnt) {
   return camEnt ? camEnt.name : (activeCamEnt ? activeCamEnt.name : t('Vista libre'));
@@ -2110,9 +2296,6 @@ $('btnShot').onclick = () => {
     const ent = selectedShotCamEnt();
     const cam = ent ? ent.cam : freeCam;
     renderToCapCanvas(ent);
-    const tCan = document.createElement('canvas');
-    tCan.width = 480; tCan.height = 270;
-    tCan.getContext('2d').drawImage(capCanvas, 0, 0, 480, 270);
     const shotType = $('mShotType').value, notes = $('mShotNotes').value.trim();
     const directions = collectShotDirectionInputs(directionDrafts);
     const shotState = captureShotState(ent, directions);
@@ -2124,7 +2307,7 @@ $('btnShot').onclick = () => {
       characterStates: shotState.characterStates,
       propStates: shotState.propStates,
       prompt: generatePrompt(ent, shotType, notes, shotState),
-      thumb: tCan.toDataURL('image/jpeg', 0.82)
+      thumb: thumbFromCap(0.82)
     });
     closeModal(); renderShots();
     toast('Toma guardada con prompt generado');
@@ -2158,6 +2341,7 @@ function serializeScene(opts = {}) {
     })),
     cameras: R.cameras.map(c => ({
       id: c.id, name: c.name, fov: +c.cam.fov.toFixed(1), shotType: c.shotType,
+      ratio: c.ratio || '16:9', thirds: c.thirds !== false,
       position: v3(c.cam.position), rotation: eDeg(c.cam.rotation),
       path: JSON.parse(JSON.stringify(c.path))
     })),
@@ -2235,6 +2419,7 @@ function applySceneData(data, opts = {}) {
     }
     for (const c of data.cameras || []) {
       addCamera({ noUndo: true, noSelect: true, id: c.id, name: c.name, fov: c.fov, shotType: c.shotType,
+        ratio: c.ratio, thirds: c.thirds,
         pos: c.position, rot: c.rotation, path: c.path || { interpolation: 'catmullrom', keyframes: [] } });
     }
     camCounter = R.cameras.length;
@@ -2255,7 +2440,7 @@ function applySceneData(data, opts = {}) {
   applyEnv(); syncEnvUI();
   $('inpSceneName').value = sceneName; $('inpSceneDesc').value = sceneDesc;
   renderCharList(); renderPropList(); renderPersp(); renderShots(); renderCaps();
-  refreshPipSelect(); refreshTlCams(); refreshKfs();
+  refreshPipSelect(); refreshKfs();
   if (R.cameras.length && !pipEnt) setPipEnt(R.cameras[0]);
 }
 // ---------- deshacer / rehacer ----------
@@ -2286,10 +2471,7 @@ function persistScenes(all) { localStorage.setItem(LSKEY, JSON.stringify(all)); 
 function makeSceneThumb() {
   try {
     renderToCapCanvas(activeCamEnt);
-    const c = document.createElement('canvas');
-    c.width = 480; c.height = 270;
-    c.getContext('2d').drawImage(capCanvas, 0, 0, 480, 270);
-    return c.toDataURL('image/jpeg', 0.72);
+    return thumbFromCap(0.72);
   } catch { return null; }
 }
 function saveSceneLocal(name, silent) {
@@ -2403,8 +2585,10 @@ $('btnGuide').onclick = () => openModal(t('Guia rapida'), `
     <li>${t('Anade <b>Personajes</b> (maniquies o GLB) y asignales rol, emocion y pose.')}</li>
     <li>${t('Coloca <b>Props</b> y luces puntuales.')}</li>
     <li>${t('Navega hasta un buen encuadre y pulsa <b>+</b> en Perspectivas para crear una camara ahi.')}</li>
+    <li>${t('En el inspector de la camara elige <b>objetivo</b> (14-135 mm), <b>encuadre</b> (16:9, 9:16, 2.39:1, 1:1) y activa la <b>regla de tercios</b> para componer la toma.')}</li>
     <li>${t('Anima camaras, personajes y props con <b>Trayectorias</b>: selecciona la entidad en el timeline, muevela y anade keyframes. Al reproducir, todo lo que tenga keyframes se anima a la vez.')}</li>
-    <li>${t('<b>Capturar</b> genera un JPG limpio 1600x900; <b>Guardar toma</b> ademas guarda encuadre, notas y un prompt listo para IA; el boton de video exporta la trayectoria como WebM.')}</li>
+    <li>${t('El panel <b>Trayectorias</b> muestra la jerarquia completa de la escena con los keyframes de cada objeto animado; el boton de filas muestra u oculta el editor de keyframes.')}</li>
+    <li>${t('<b>Capturar</b> genera un JPG limpio con el encuadre de la camara; <b>Guardar toma</b> ademas guarda encuadre, notas y un prompt listo para IA; el boton de video exporta la trayectoria como WebM.')}</li>
     <li>${t('<b>Guardar</b> en el navegador o <b>Exportar</b> como archivo .json (incluye GLB y capturas). En <b>Proyectos</b> encuentras todo lo guardado.')}</li>
   </ol>
   <div class="lbl">${t('Controles')}</div>
@@ -2571,7 +2755,7 @@ function refreshLanguage() {
   if (tlEnt && tlEnt.path) $('tlInterp').value = tlEnt.path.interpolation;
   syncEnvUI();
   renderCharList(); renderPropList(); renderPersp(); renderShots(); renderCaps();
-  refreshPipSelect(); refreshTlCams(); refreshKfs();
+  refreshPipSelect(); refreshKfs();
   if (selected) renderInspector();
   if (!$('launcher').classList.contains('hidden')) renderLauncher();
 }
@@ -2586,7 +2770,7 @@ function postLoadRefresh() {
   $('inpSceneName').value = sceneName;
   $('inpSceneDesc').value = sceneDesc;
   renderCharList(); renderPropList(); renderPersp(); renderShots(); renderCaps();
-  refreshPipSelect(); refreshTlCams(); refreshKfs();
+  refreshPipSelect(); refreshKfs();
 }
 buildStaticUI();
 await tryLoadDefaultChar();

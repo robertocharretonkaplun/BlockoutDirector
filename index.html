@@ -17,7 +17,16 @@
 </head>
 <body>
 
-<div id="viewport"><canvas id="c"></canvas><div id="labels"></div></div>
+<div id="viewport"><canvas id="c"></canvas><div id="labels"></div>
+  <div id="frameGuides" class="hidden">
+    <div id="fgFrame">
+      <span class="fg-line v" style="left:33.333%"></span>
+      <span class="fg-line v" style="left:66.666%"></span>
+      <span class="fg-line h" style="top:33.333%"></span>
+      <span class="fg-line h" style="top:66.666%"></span>
+    </div>
+  </div>
+</div>
 
 <div id="topbar">
   <div class="tb brand"><img class="brand-logo" src="./Slate/LogoAO.png" alt="Logo AO"><i class="ph ph-film-slate"></i><span class="brand-title">Blockout Director</span></div>
@@ -116,25 +125,35 @@
   </div>
 </aside>
 
-<aside id="rightPanel" class="card hidden">
-  <div class="hd" id="inspTitle">Propiedades</div>
-  <div class="bd" id="inspector"></div>
-</aside>
+<div id="dockRight">
+  <div id="perspPanel" class="card">
+    <div class="hd" data-i18n><i class="ph ph-video-camera"></i> Perspectivas <button class="btn mini2" id="btnAddCam" data-i18n-title title="Crear cámara desde la vista actual"><i class="ph ph-plus"></i></button></div>
+    <div class="bd" id="perspList"></div>
+  </div>
 
-<div id="perspPanel" class="card">
-  <div class="hd" data-i18n><i class="ph ph-video-camera"></i> Perspectivas <button class="btn mini2" id="btnAddCam" data-i18n-title title="Crear cámara desde la vista actual"><i class="ph ph-plus"></i></button></div>
-  <div class="bd" id="perspList"></div>
-</div>
+  <aside id="rightPanel" class="card hidden">
+    <div class="hd" id="inspTitle">Propiedades</div>
+    <div class="bd" id="inspector"></div>
+  </aside>
 
-<div id="pipPanel" class="card">
-  <div class="hd"><i class="ph ph-monitor-play"></i> <select id="pipSelect"></select><span class="hint" style="margin:0;flex-shrink:0" data-i18n>Preview final</span></div>
-  <canvas id="pip" width="728" height="410"></canvas>
+  <div id="pipPanel" class="card">
+    <div class="hd"><i class="ph ph-monitor-play"></i> <select id="pipSelect"></select><span class="hint" style="margin:0;flex-shrink:0" data-i18n>Preview final</span></div>
+    <div class="pip-wrap">
+      <canvas id="pip" width="728" height="410"></canvas>
+      <div id="pipGuides" class="hidden">
+        <span class="fg-line v" style="left:33.333%"></span>
+        <span class="fg-line v" style="left:66.666%"></span>
+        <span class="fg-line h" style="top:33.333%"></span>
+        <span class="fg-line h" style="top:66.666%"></span>
+      </div>
+    </div>
+  </div>
 </div>
 
 <div id="timelinePanel" class="card hidden">
   <div class="hd" data-i18n><i class="ph ph-path"></i> Trayectorias
-    <select id="tlCam" style="width:170px;margin-left:8px"></select>
-    <select id="tlInterp" style="width:150px"></select>
+    <select id="tlInterp" style="width:150px;margin-left:8px"></select>
+    <button class="btn active" id="tlToggle" data-i18n-title title="Mostrar/ocultar editor de keyframes"><i class="ph ph-rows"></i></button>
     <button class="btn" id="tlClose" style="margin-left:auto"><i class="ph ph-x"></i></button>
   </div>
   <div class="bd">
@@ -147,14 +166,15 @@
       <button class="btn outline" id="tlCap" data-i18n-title title="Capturar fotograma en este punto"><i class="ph ph-camera"></i></button>
       <button class="btn outline" id="tlVideo" data-i18n-title title="Exportar video WebM de la trayectoria"><i class="ph ph-film-reel"></i></button>
     </div>
-    <div class="row" style="flex-wrap:wrap" id="tlKfs"></div>
-    <div class="row">
+    <div id="tlTracks"></div>
+    <div class="row tk-addrow">
       <label>t =</label>
       <input type="number" id="tlKfTime" value="0" min="0" step="0.5" style="width:74px">
       <span>s</span>
       <button class="btn outline" id="tlAddKf" data-i18n><i class="ph ph-plus"></i> Keyframe aquí</button>
       <span class="hint" style="margin:0" id="tlKfHint"></span>
     </div>
+    <div class="row" style="flex-wrap:wrap" id="tlKfs"></div>
   </div>
 </div>
 

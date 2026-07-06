@@ -24,12 +24,24 @@
   --r-card:14px; --r-ctrl:8px;
   --shadow:0 1px 2px rgba(23,25,35,.05), 0 10px 32px rgba(23,25,35,.10);
   --shadow-sm:0 1px 2px rgba(23,25,35,.06), 0 4px 14px rgba(23,25,35,.08);
+  /* Layout acoplado (estilo editor de motor de juego): docks fijos, el viewport
+     3D se redimensiona al hueco central y ningún panel se superpone a otro.
+     --tb-h y --tl-h las actualiza app.js midiendo topbar y panel de trayectorias. */
+  --panel-w-l:250px; --panel-w-r:364px;
+  --dock-l:calc(var(--panel-w-l) + 24px);
+  --dock-r:calc(var(--panel-w-r) + 24px);
+  --tb-h:64px;
+  --tl-h:0px;
+  /* Escala z documentada: 0 viewport · 15 docks · 16 dock inferior · 20 topbar ·
+     30 HUD vuelo · 40 lanzador · 50 modal · 60 toast · 70 export video */
 }
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;overflow:hidden;background:#d9d8d3;
   font-family:var(--font-sans);font-size:13px;color:var(--ink);
   -webkit-font-smoothing:antialiased}
-#viewport{position:fixed;inset:0}
+#viewport{position:fixed;left:var(--dock-l);right:var(--dock-r);top:var(--tb-h);
+  bottom:calc(12px + var(--tl-h));border-radius:var(--r-card);overflow:hidden;
+  border:1px solid var(--line);box-shadow:var(--shadow);background:#0e0f13}
 canvas#c{width:100%;height:100%;display:block;touch-action:none}
 #labels{position:absolute;inset:0;pointer-events:none;overflow:hidden}
 .label3d{position:absolute;transform:translate(-50%,-115%);background:rgba(20,22,30,.85);color:#fff;
@@ -75,17 +87,32 @@ button:focus-visible,.chip:focus-visible,.item:focus-visible{outline:2px solid v
 .card.closed .bd{display:none}
 .card.closed .hd .chev{transform:rotate(-90deg)}
 .card .bd{padding:2px 13px 13px}
-#leftPanel{position:fixed;left:12px;top:64px;bottom:12px;width:250px;overflow-y:auto;display:flex;flex-direction:column;gap:10px;z-index:15;padding:2px}
+#leftPanel{position:fixed;left:12px;top:var(--tb-h);bottom:12px;width:var(--panel-w-l);overflow-y:auto;display:flex;flex-direction:column;gap:10px;z-index:15;padding:2px}
 #leftPanel .card{flex-shrink:0}
 #leftPanel .card .hd{cursor:pointer}
-/* alto máximo = viewport - top(64) - alto del preview final (~253px) - margen inferior(12) - separación(15) */
-#rightPanel{position:fixed;right:12px;top:64px;width:284px;max-height:calc(100vh - 344px);overflow-y:auto;z-index:15}
-#perspPanel{position:fixed;right:388px;bottom:12px;width:200px;z-index:15}
-#pipPanel{position:fixed;right:12px;bottom:12px;width:364px;z-index:15;overflow:hidden}
+/* dock derecho: Perspectivas (arriba) + Propiedades (crece con scroll) + Preview (abajo) */
+#dockRight{position:fixed;right:12px;top:var(--tb-h);bottom:12px;width:var(--panel-w-r);
+  display:flex;flex-direction:column;gap:10px;z-index:15;padding:2px}
+#rightPanel{flex:0 1 auto;min-height:0;overflow-y:auto}
+#perspPanel{flex-shrink:0}
+#perspPanel .bd{max-height:170px;overflow-y:auto}
+#pipPanel{margin-top:auto;flex-shrink:0;overflow:hidden}
 #pipPanel .hd{padding:8px 12px;font-weight:600;font-size:12px;gap:6px}
 #pipPanel select{flex:1;min-width:0}
+.pip-wrap{position:relative}
 canvas#pip{width:100%;display:block;background:#0e0f13;border-top:1px solid var(--line)}
-#timelinePanel{position:fixed;left:50%;transform:translateX(-50%);bottom:12px;width:min(780px,92vw);z-index:17}
+/* dock inferior: ocupa exactamente el ancho entre los docks laterales */
+#timelinePanel{position:fixed;left:var(--dock-l);right:var(--dock-r);bottom:12px;z-index:16}
+#timelinePanel.kfs-off .tk-lane,#timelinePanel.kfs-off #tlKfs,#timelinePanel.kfs-off .tk-addrow{display:none}
+
+/* ---------- guías de encuadre y regla de tercios ---------- */
+#frameGuides{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+#fgFrame{position:absolute;border:1px solid rgba(255,255,255,.5);box-shadow:0 0 0 200vmax rgba(10,11,14,.48)}
+.fg-line{position:absolute;background:rgba(255,255,255,.28)}
+.fg-line.v{top:0;bottom:0;width:1px}
+.fg-line.h{left:0;right:0;height:1px}
+#frameGuides.no-thirds .fg-line,#pipGuides.no-thirds .fg-line{display:none}
+#pipGuides{position:absolute;border:1px solid rgba(255,255,255,.22);pointer-events:none}
 
 @media (max-width: 1380px){
   #topbar .file-menu{margin-left:auto}
@@ -98,18 +125,15 @@ canvas#pip{width:100%;display:block;background:#0e0f13;border-top:1px solid var(
   #topbar .file-menu{margin-left:0}
   #topbar .brand{max-width:210px}
   #topbar .shot-menu .btn,#topbar .file-menu .btn,#toolSeg .btn{padding-left:8px;padding-right:8px}
-  #leftPanel,#rightPanel{top:108px}
 }
 
 @media (max-width: 980px){
+  /* colapso explícito: los docks laterales ceden ancho y el viewport conserva el centro */
+  :root{--panel-w-l:min(230px,30vw);--panel-w-r:min(320px,36vw)}
   #topbar{left:8px;right:8px;gap:5px}
   #topbar .brand{max-width:190px}
   #topbar .tb{min-height:36px}
   .btn{padding-left:8px;padding-right:8px}
-  #leftPanel{width:min(250px,42vw);top:112px}
-  #rightPanel{width:min(284px,42vw);top:112px}
-  #perspPanel{right:calc(min(364px,42vw) + 24px);width:190px}
-  #pipPanel{width:min(364px,42vw)}
 }
 
 /* ---------- inputs ---------- */
@@ -184,13 +208,35 @@ input[type=checkbox]{accent-color:var(--accent)}
 .kfchip .x{border:0;background:none;cursor:pointer;color:var(--accent-ink);padding:0 2px;font-size:11px}
 #tlTime{font-family:var(--font-mono)}
 
+/* ---------- editor de trayectorias: jerarquía + pistas de keyframes ---------- */
+#tlTracks{max-height:min(200px,24vh);overflow-y:auto;border:1px solid var(--line);border-radius:10px;
+  padding:4px 10px 8px;background:var(--card-2);margin-top:10px}
+#tlTracks .tk-group{margin:7px 0 2px}
+.tk-row{display:flex;align-items:center;gap:8px;padding:2px 4px;border-radius:7px}
+.tk-row.active{background:var(--accent-soft)}
+.tk-label{width:148px;flex:0 0 148px;display:flex;align-items:center;gap:5px;cursor:pointer;min-width:0}
+.tk-label .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11.5px}
+.tk-label .ph{font-size:13px;color:var(--muted);flex-shrink:0}
+.tk-count{margin-left:auto;font-family:var(--font-mono);font-size:10px;color:var(--muted);flex-shrink:0}
+.tk-lane{position:relative;flex:1;height:18px;background:var(--card);border:1px solid var(--line);border-radius:999px;min-width:0}
+.kfmark{position:absolute;top:50%;width:8px;height:8px;transform:translate(-50%,-50%) rotate(45deg);
+  background:var(--accent);border-radius:2px;cursor:pointer;box-shadow:0 0 0 1.5px #fff;transition:transform .1s ease}
+.kfmark.obj{background:#dd8422}
+.kfmark:hover{transform:translate(-50%,-50%) rotate(45deg) scale(1.3)}
+.lane-ph{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--danger);opacity:.6;
+  transform:translateX(-50%);pointer-events:none;border-radius:2px}
+#tlToggle.active{background:var(--accent-soft);color:var(--accent-ink)}
+
+/* valor a la derecha de una etiqueta .lbl (p. ej. mm del objetivo) */
+.lbl .lbl-val{float:right;font-family:var(--font-mono);font-weight:500;text-transform:none;letter-spacing:0;color:var(--ink)}
+
 /* ---------- modal / toast ---------- */
 #modalBack{position:fixed;inset:0;background:rgba(15,17,22,.42);backdrop-filter:blur(5px);z-index:50;
   display:flex;align-items:center;justify-content:center;animation:fadeIn .16s ease}
 #modalCard{width:min(580px,92vw);max-height:85vh;overflow-y:auto;animation:popIn .2s cubic-bezier(.16,1,.3,1)}
 .mrow{margin-top:10px}
 .mrow>label{display:block;font-size:11.5px;font-weight:600;color:var(--muted);margin-bottom:4px}
-#toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);z-index:60;display:flex;flex-direction:column;gap:6px;align-items:center;pointer-events:none}
+#toast{position:fixed;left:calc(var(--dock-l) + (100vw - var(--dock-l) - var(--dock-r)) / 2);bottom:calc(var(--tl-h) + 46px);transform:translateX(-50%);z-index:60;display:flex;flex-direction:column;gap:6px;align-items:center;pointer-events:none}
 .toastMsg{background:#16181d;color:#fff;padding:8px 15px;border-radius:10px;font-size:12.5px;box-shadow:var(--shadow);
   animation:toastIn .22s cubic-bezier(.16,1,.3,1)}
 .hidden{display:none !important}
@@ -244,7 +290,7 @@ html[lang=en] #capList:empty::after{content:'No captures. "Capture" renders a cl
 html[lang=en] #lcGrid:empty::after{content:'No saved projects yet. Create a new one or open the sample scene.'}
 
 /* ---------- HUD de vuelo libre (navegación estilo UE) ---------- */
-#flyHud{position:fixed;left:50%;bottom:54px;transform:translateX(-50%);z-index:30;pointer-events:none;
+#flyHud{position:fixed;left:calc(var(--dock-l) + (100vw - var(--dock-l) - var(--dock-r)) / 2);bottom:calc(var(--tl-h) + 42px);transform:translateX(-50%);z-index:30;pointer-events:none;
   background:rgba(20,22,30,.9);color:#fff;border-radius:999px;padding:6px 15px;font-size:12px;
   box-shadow:var(--shadow-sm);display:flex;align-items:center;gap:6px;white-space:nowrap;
   animation:toastIn .18s cubic-bezier(.16,1,.3,1)}

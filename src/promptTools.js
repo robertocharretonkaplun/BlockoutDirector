@@ -166,9 +166,10 @@ export function createPromptTools({
     const props = snap.propStates || [];
 
     const L = [];
-    L.push(t('Fotograma cinematografico - {shot} desde la camara "{cam}" (FOV {fov}°, {angle}).', {
+    L.push(t('Fotograma cinematografico - {shot} desde la camara "{cam}" (lente {mm} mm, FOV {fov}°, encuadre {ratio}, {angle}).', {
       shot: t(shotType || (camEnt ? camEnt.shotType : 'Plano general')).toLowerCase(),
-      cam: camDisplayName(camEnt), fov: Math.round(cam.fov), angle: angleDesc
+      cam: camDisplayName(camEnt), mm: Math.round(cam.getFocalLength()),
+      fov: Math.round(cam.fov), ratio: (camEnt && camEnt.ratio) || '16:9', angle: angleDesc
     }));
     const noDot = s => String(s).replace(/[.\s]+$/, '');
     const sceneName = getSceneName();
