@@ -7,7 +7,30 @@ y el proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
 
 ---
 
-## [0.8.0] - 2026-07-06
+## [0.9.0] - 2026-07-06
+
+### Añadido
+- **Rail vertical de pestañas estilo Unreal Engine** en el borde izquierdo:
+  **Colocar actores** (personajes y props), **World Settings** (datos de
+  escena), **Entorno** (skybox, suelo e iluminación) y **Tomas** (tomas y
+  capturas). Cada pestaña despliega su contenido como panel lateral; volver a
+  pulsarla (o el botón «) pliega el panel y devuelve el espacio al viewport.
+  La pestaña activa se recuerda entre sesiones.
+- Nuevo módulo `src/dock.js` con la lógica del rail y del panel desplegable.
+
+### Cambiado
+- **Dock derecho reorganizado como en Unreal**: Outliner arriba (ahora
+  plegable), Details debajo, Perspectivas y el preview final (Main Shot)
+  anclado al fondo. El Outliner ya no vive en el panel izquierdo.
+- **Tema visual estilo UE5**: paleta gris neutro oscuro con separadores casi
+  negros, campos hundidos, acento azul de selección más sobrio (pestañas,
+  chips y filas activas), barra superior compacta y radios de 4 px en los
+  controles.
+- Los datos de escena (nombre y descripción) se declaran directamente en el
+  panel World Settings del HTML; se elimina la reorganización de paneles por
+  script (`setupPanelLayout`), sustituida por el rail de pestañas.
+
+
 
 ### Añadido
 - **Controles de fotografía en el inspector de cámara**: selector de **objetivo**

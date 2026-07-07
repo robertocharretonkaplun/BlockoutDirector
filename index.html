@@ -58,86 +58,110 @@
   </div>
 </div>
 
+<!-- Barra vertical de pestañas estilo Unreal: cada pestaña despliega su panel -->
+<div id="leftRail">
+  <button class="rail-tab" data-tab="place" data-i18n-title title="Colocar actores"><i class="ph ph-plus-square"></i><span class="rail-lbl" data-i18n>Colocar actores</span></button>
+  <button class="rail-tab" data-tab="world" data-i18n-title title="World Settings"><i class="ph ph-globe-hemisphere-west"></i><span class="rail-lbl" data-i18n>World Settings</span></button>
+  <button class="rail-tab" data-tab="env" data-i18n-title title="Entorno"><i class="ph ph-mountains"></i><span class="rail-lbl" data-i18n>Entorno</span></button>
+  <button class="rail-tab" data-tab="shots" data-i18n-title title="Tomas"><i class="ph ph-film-strip"></i><span class="rail-lbl" data-i18n>Tomas</span></button>
+</div>
+
 <aside id="leftPanel">
-  <div class="card closed" id="cardScene">
-    <div class="hd" data-i18n><i class="ph ph-film-strip"></i> Escena <span class="chev">v</span></div>
-    <div class="bd">
-      <div class="lbl" data-i18n>Nombre</div>
-      <input type="text" id="inpSceneName" data-i18n-ph placeholder="Nombre de la escena">
-      <div class="lbl" data-i18n>Descripción</div>
-      <textarea id="inpSceneDesc" rows="3" data-i18n-ph placeholder="Descripción de la escena (se usa en los prompts generados)"></textarea>
-    </div>
+  <div id="drawerHead">
+    <span class="drawer-title" data-tab="place" data-i18n>Colocar actores</span>
+    <span class="drawer-title" data-tab="world" data-i18n>World Settings</span>
+    <span class="drawer-title" data-tab="env" data-i18n>Entorno</span>
+    <span class="drawer-title" data-tab="shots" data-i18n>Tomas</span>
+    <button id="drawerClose" data-i18n-title title="Ocultar panel"><i class="ph ph-caret-double-left"></i></button>
   </div>
+  <div id="drawerBody">
 
-  <div class="card closed" id="cardEnv">
-    <div class="hd" data-i18n><i class="ph ph-mountains"></i> Entorno e iluminación <span class="chev">v</span></div>
-    <div class="bd">
-      <div class="lbl" data-i18n>Skybox</div>
-      <div id="skyChips" class="chips"></div>
-      <div class="row"><label style="width:52px" data-i18n>Suelo</label><select id="selFloor"></select></div>
-      <div class="row">
-        <label class="ck"><input type="checkbox" id="chkGrid" checked> Grid</label>
-        <label class="ck" data-i18n><input type="checkbox" id="chkShadows" checked> Sombras</label>
-        <label class="ck" data-i18n><input type="checkbox" id="chkFog"> Niebla</label>
-        <label class="ck" data-i18n><input type="checkbox" id="chkLabels" checked> Etiquetas</label>
+    <div class="card" id="cardChars" data-tab="place">
+      <div class="hd" data-i18n><i class="ph ph-person"></i> Personajes <span class="chev">v</span></div>
+      <div class="bd">
+        <div class="grid2">
+          <button class="btn outline" id="btnAddChar" data-i18n><i class="ph ph-user-plus"></i> Personaje</button>
+          <button class="btn outline" id="btnAddMan" data-i18n><i class="ph ph-person-simple"></i> Maniquí</button>
+        </div>
+        <button class="btn outline w100" id="btnGlbChar" style="margin-top:6px" data-i18n data-i18n-title title="Importar un .glb y usarlo como modelo de personaje por defecto"><i class="ph ph-package"></i> Cambiar modelo (GLB)...</button>
+        <div class="hint" id="charModelHint"></div>
       </div>
-      <div class="row"><label style="width:66px" data-i18n>Sol</label><input type="range" id="rngSun" min="0" max="8" step="0.1"><input type="color" id="colSun"></div>
-      <div class="row"><label style="width:66px" data-i18n>Altura sol</label><input type="range" id="rngSunElev" min="5" max="89" step="1"></div>
-      <div class="row"><label style="width:66px" data-i18n>Giro sol</label><input type="range" id="rngSunAzim" min="0" max="360" step="1"></div>
-      <div class="row"><label style="width:66px" data-i18n>Ambiente</label><input type="range" id="rngAmb" min="0" max="3" step="0.05"><input type="color" id="colAmb"></div>
     </div>
-  </div>
 
-  <div class="card" id="cardChars">
-    <div class="hd" data-i18n><i class="ph ph-person"></i> Personajes <span class="chev">v</span></div>
-    <div class="bd">
-      <div class="grid2">
-        <button class="btn outline" id="btnAddChar" data-i18n><i class="ph ph-user-plus"></i> Personaje</button>
-        <button class="btn outline" id="btnAddMan" data-i18n><i class="ph ph-person-simple"></i> Maniquí</button>
+    <div class="card" id="cardProps" data-tab="place">
+      <div class="hd" data-i18n><i class="ph ph-cube"></i> Props y objetos <span class="chev">v</span></div>
+      <div class="bd">
+        <div class="grid3" id="propBtns"></div>
+        <button class="btn outline w100" id="btnGlbProp" style="margin-top:6px" data-i18n><i class="ph ph-package"></i> Importar GLB</button>
       </div>
-      <button class="btn outline w100" id="btnGlbChar" style="margin-top:6px" data-i18n data-i18n-title title="Importar un .glb y usarlo como modelo de personaje por defecto"><i class="ph ph-package"></i> Cambiar modelo (GLB)...</button>
-      <div class="hint" id="charModelHint"></div>
-      <div id="charList"></div>
     </div>
-  </div>
 
-  <div class="card" id="cardProps">
-    <div class="hd" data-i18n><i class="ph ph-cube"></i> Props y objetos <span class="chev">v</span></div>
-    <div class="bd">
-      <div class="grid3" id="propBtns"></div>
-      <button class="btn outline w100" id="btnGlbProp" style="margin-top:6px" data-i18n><i class="ph ph-package"></i> Importar GLB</button>
-      <div id="propList"></div>
+    <div class="card" id="cardWorld" data-tab="world">
+      <div class="hd" data-i18n><i class="ph ph-article"></i> Datos de escena <span class="chev">v</span></div>
+      <div class="bd" id="worldSettingsBody">
+        <div class="lbl" data-i18n>Nombre</div>
+        <input type="text" id="inpSceneName" data-i18n-ph placeholder="Nombre de la escena">
+        <div class="lbl" data-i18n>Descripción</div>
+        <textarea id="inpSceneDesc" rows="3" data-i18n-ph placeholder="Descripción de la escena (se usa en los prompts generados)"></textarea>
+      </div>
     </div>
-  </div>
 
-  <div class="card" id="cardShots">
-    <div class="hd" data-i18n><i class="ph ph-film-slate"></i> Tomas <span class="chev">v</span></div>
-    <div class="bd">
-      <div id="shotList"></div>
+    <div class="card" id="cardEnv" data-tab="env">
+      <div class="hd" data-i18n><i class="ph ph-mountains"></i> Entorno e iluminación <span class="chev">v</span></div>
+      <div class="bd">
+        <div class="lbl" data-i18n>Skybox</div>
+        <div id="skyChips" class="chips"></div>
+        <div class="row"><label style="width:52px" data-i18n>Suelo</label><select id="selFloor"></select></div>
+        <div class="row">
+          <label class="ck"><input type="checkbox" id="chkGrid" checked> Grid</label>
+          <label class="ck" data-i18n><input type="checkbox" id="chkShadows" checked> Sombras</label>
+          <label class="ck" data-i18n><input type="checkbox" id="chkFog"> Niebla</label>
+          <label class="ck" data-i18n><input type="checkbox" id="chkLabels" checked> Etiquetas</label>
+        </div>
+        <div class="row"><label style="width:66px" data-i18n>Sol</label><input type="range" id="rngSun" min="0" max="8" step="0.1"><input type="color" id="colSun"></div>
+        <div class="row"><label style="width:66px" data-i18n>Altura sol</label><input type="range" id="rngSunElev" min="5" max="89" step="1"></div>
+        <div class="row"><label style="width:66px" data-i18n>Giro sol</label><input type="range" id="rngSunAzim" min="0" max="360" step="1"></div>
+        <div class="row"><label style="width:66px" data-i18n>Ambiente</label><input type="range" id="rngAmb" min="0" max="3" step="0.05"><input type="color" id="colAmb"></div>
+      </div>
     </div>
-  </div>
 
-  <div class="card" id="cardCaps">
-    <div class="hd" data-i18n><i class="ph ph-camera"></i> Capturas <span class="chev">v</span></div>
-    <div class="bd">
-      <div id="capList"></div>
+    <div class="card" id="cardShots" data-tab="shots">
+      <div class="hd" data-i18n><i class="ph ph-film-slate"></i> Tomas <span class="chev">v</span></div>
+      <div class="bd">
+        <div id="shotList"></div>
+      </div>
     </div>
+
+    <div class="card" id="cardCaps" data-tab="shots">
+      <div class="hd" data-i18n><i class="ph ph-camera"></i> Capturas <span class="chev">v</span></div>
+      <div class="bd">
+        <div id="capList"></div>
+      </div>
+    </div>
+
   </div>
 </aside>
 
 <div id="dockRight">
-  <div id="perspPanel" class="card">
-    <div class="hd" data-i18n><i class="ph ph-video-camera"></i> Perspectivas <button class="btn mini2" id="btnAddCam" data-i18n-title title="Crear cámara desde la vista actual"><i class="ph ph-plus"></i></button></div>
-    <div class="bd" id="perspList"></div>
+  <div class="card collap" id="cardScene">
+    <div class="hd" data-i18n><i class="ph ph-list-bullets"></i> Outliner <span class="chev">v</span></div>
+    <div class="bd">
+      <div id="outlinerList" class="outliner-list"></div>
+    </div>
   </div>
 
   <aside id="rightPanel" class="card hidden">
-    <div class="hd" id="inspTitle">Propiedades</div>
+    <div class="hd" id="inspTitle">Details</div>
     <div class="bd" id="inspector"></div>
   </aside>
 
+  <div id="perspPanel" class="card collap">
+    <div class="hd" data-i18n><i class="ph ph-video-camera"></i> Perspectivas <button class="btn mini2" id="btnAddCam" data-i18n-title title="Crear cámara desde la vista actual"><i class="ph ph-plus"></i></button><span class="chev">v</span></div>
+    <div class="bd" id="perspList"></div>
+  </div>
+
   <div id="pipPanel" class="card">
-    <div class="hd"><i class="ph ph-monitor-play"></i> <select id="pipSelect"></select><span class="hint" style="margin:0;flex-shrink:0" data-i18n>Preview final</span></div>
+    <div class="hd"><i class="ph ph-monitor-play"></i> <span id="pipTitle">Main Shot</span><span class="hint" style="margin:0;flex-shrink:0" data-i18n>Preview final</span></div>
     <div class="pip-wrap">
       <canvas id="pip" width="728" height="410"></canvas>
       <div id="pipGuides" class="hidden">

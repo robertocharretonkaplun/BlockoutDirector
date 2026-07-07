@@ -31,7 +31,19 @@ const DICT = {
   'Blockout Director - Consola de dirección 3D': 'Blockout Director - 3D directing console',
   'Consola de dirección 3D': '3D directing console',
 
+  // --- rail de pestañas / drawer ---
+  'Colocar actores': 'Place Actors',
+  'Entorno': 'Environment',
+  'Ocultar panel': 'Hide panel',
+
   // --- panel de escena / entorno ---
+  'Outliner': 'Outliner',
+  'World Settings': 'World Settings',
+  'Light Settings': 'Light Settings',
+  'Details': 'Details',
+  'Datos de escena': 'Scene details',
+  'Sin elementos en la escena. Agrega personajes, props o cámaras.': 'No scene elements yet. Add characters, props or cameras.',
+  'Las cámaras creadas aparecen en Outliner.': 'Created cameras appear in the Outliner.',
   'Escena': 'Scene',
   'Nombre': 'Name',
   'Nombre de la escena': 'Scene name',

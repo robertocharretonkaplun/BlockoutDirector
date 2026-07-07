@@ -4,6 +4,7 @@ import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { createPromptTools } from './promptTools.js';
 import { t, getLang, setLang, applyStaticI18n } from './i18n.js';
+import { initDockUI } from './dock.js';
 
 /* ============================================================
    NUCLEO - utilidades, estado, escena base, selección, render
@@ -429,12 +430,12 @@ addEventListener('resize', layoutViewport);
 new ResizeObserver(layoutViewport).observe(vpEl);
 // la barra superior puede ocupar 1 o 2 filas según el ancho: los docks la siguen
 new ResizeObserver(() => {
-  document.documentElement.style.setProperty('--tb-h', ($('topbar').offsetHeight + 20) + 'px');
+  document.documentElement.style.setProperty('--tb-h', $('topbar').offsetHeight + 'px');
 }).observe($('topbar'));
 // el panel de trayectorias actúa como dock inferior: su alto empuja el viewport
 new ResizeObserver(() => {
   const h = $('timelinePanel').offsetHeight;
-  document.documentElement.style.setProperty('--tl-h', h > 0 ? (h + 10) + 'px' : '0px');
+  document.documentElement.style.setProperty('--tl-h', h > 0 ? h + 'px' : '0px');
 }).observe($('timelinePanel'));
 
 // ---------- atajos de teclado ----------
@@ -475,6 +476,9 @@ addEventListener('keyup', e => {
 });
 // si la ventana pierde el foco, soltar todas las teclas de vuelo (evita movimiento "pegado")
 addEventListener('blur', () => { for (const k in fly.keys) fly.keys[k] = false; fly.boost = false; });
+
+// rail de pestañas verticales + drawer izquierdo (estilo Unreal)
+initDockUI();
 
 // colapsar tarjetas del panel izquierdo
 document.querySelectorAll('#leftPanel .card .hd').forEach(h => {
@@ -1101,29 +1105,50 @@ function setSelected(ent) {
   if (ent && tlEnt !== ent && !$('timelinePanel').classList.contains('hidden')) { tlEnt = ent; refreshKfs(); }
 }
 
-// ---------- listas del panel izquierdo ----------
-function renderCharList() {
-  const el = $('charList'); el.innerHTML = '';
-  for (const c of R.characters) {
-    const d = document.createElement('div');
-    d.className = 'item' + (selected === c ? ' active' : '');
-    d.innerHTML = `<span class="dot" style="background:${c.colorHex || '#8a8f98'}"></span><span class="nm">${escapeHtml(c.name)}</span><button class="x" title="${t('Eliminar')}">x</button>`;
-    d.onclick = () => setSelected(c);
-    d.querySelector('.x').onclick = e => { e.stopPropagation(); deleteEnt(c); };
-    el.appendChild(d);
+// ---------- outliner del panel izquierdo ----------
+function renderOutliner() {
+  const el = $('outlinerList');
+  if (!el) return;
+  el.innerHTML = '';
+
+  const groups = [
+    [t('Cámaras'), R.cameras, 'ph-video-camera'],
+    [t('Personajes'), R.characters, 'ph-person'],
+    [t('Props y objetos'), R.props, 'ph-cube']
+  ];
+
+  let any = false;
+  for (const [label, arr, fallbackIcon] of groups) {
+    if (!arr.length) continue;
+    any = true;
+    const gh = document.createElement('div');
+    gh.className = 'outliner-group';
+    gh.textContent = label;
+    el.appendChild(gh);
+
+    for (const ent of arr) {
+      const d = document.createElement('div');
+      d.className = 'item outliner-item' + (selected === ent ? ' active' : '');
+      const icon = ent.kind === 'prop' ? propIcon(ent.type) : fallbackIcon;
+      const marker = ent.kind === 'character'
+        ? `<span class="dot" style="background:${ent.colorHex || '#8a8f98'}"></span>`
+        : `<i class="ph ${icon}"></i>`;
+      d.innerHTML = `${marker}<span class="nm">${escapeHtml(ent.name)}</span><button class="x" title="${t('Eliminar')}">x</button>`;
+      d.onclick = () => setSelected(ent);
+      d.querySelector('.x').onclick = e => { e.stopPropagation(); deleteEnt(ent); };
+      el.appendChild(d);
+    }
+  }
+
+  if (!any) {
+    const empty = document.createElement('div');
+    empty.className = 'outliner-empty';
+    empty.textContent = t('Sin elementos en la escena. Agrega personajes, props o cámaras.');
+    el.appendChild(empty);
   }
 }
-function renderPropList() {
-  const el = $('propList'); el.innerHTML = '';
-  for (const p of R.props) {
-    const d = document.createElement('div');
-    d.className = 'item' + (selected === p ? ' active' : '');
-    d.innerHTML = `<i class="ph ${propIcon(p.type)}"></i><span class="nm">${escapeHtml(p.name)}</span><button class="x" title="${t('Eliminar')}">x</button>`;
-    d.onclick = () => setSelected(p);
-    d.querySelector('.x').onclick = e => { e.stopPropagation(); deleteEnt(p); };
-    el.appendChild(d);
-  }
-}
+function renderCharList() { renderOutliner(); }
+function renderPropList() { renderOutliner(); }
 
 // ---------- inspector ----------
 function transformBlockHTML(ent) {
@@ -1680,6 +1705,12 @@ function renderPersp() {
   free.innerHTML = `<i class="ph ph-globe-simple"></i><span class="nm">${t('Vista libre (Director)')}</span>`;
   free.onclick = () => setViewCamera(null);
   el.appendChild(free);
+  const hint = document.createElement('div');
+  hint.className = 'hint asset-hint';
+  hint.textContent = t('Las cámaras creadas aparecen en Outliner.');
+  el.appendChild(hint);
+  renderOutliner();
+  return;
   for (const c of R.cameras) {
     const d = document.createElement('div');
     d.className = 'item' + (viewCam === c.cam ? ' active' : (selected === c ? ' active' : ''));
@@ -1688,6 +1719,7 @@ function renderPersp() {
     d.querySelector('.x').onclick = e => { e.stopPropagation(); deleteEnt(c); };
     el.appendChild(d);
   }
+  renderOutliner();
 }
 $('btnAddCam').onclick = () => {
   const ent = addCamera({});
@@ -1695,15 +1727,27 @@ $('btnAddCam').onclick = () => {
 };
 
 // ---------- preview final (PiP) ----------
-function setPipEnt(ent) { pipEnt = ent; refreshPipSelect(); }
+function mainShotEnt() {
+  return R.cameras.find(c => c.name === 'Main Shot') || R.cameras[0] || null;
+}
+function setPipEnt() {
+  pipEnt = mainShotEnt();
+  refreshPipSelect();
+}
 function refreshPipSelect() {
+  pipEnt = mainShotEnt();
+  const title = $('pipTitle');
+  if (title) title.textContent = pipEnt ? pipEnt.name : 'Main Shot';
   const sel = $('pipSelect');
-  sel.innerHTML = R.cameras.map(c => `<option value="${c.id}" ${pipEnt === c ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('');
-  if (!R.cameras.length) sel.innerHTML = `<option value="">${t('-- sin camaras --')}</option>`;
+  if (sel) {
+    sel.innerHTML = R.cameras.map(c => `<option value="${c.id}" ${pipEnt === c ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('');
+    if (!R.cameras.length) sel.innerHTML = `<option value="">${t('-- sin camaras --')}</option>`;
+  }
   updatePipGuides();
 }
-$('pipSelect').addEventListener('change', e => {
-  pipEnt = R.cameras.find(c => c.id === e.target.value) || null;
+const pipSelectEl = $('pipSelect');
+if (pipSelectEl) pipSelectEl.addEventListener('change', () => {
+  setPipEnt();
   updatePipGuides();
 });
 function renderPip() {

@@ -1,134 +1,159 @@
-# Licencia de Uso Modificable No Comercial con Atribucion
+# Licencia Privada de Uso Restringido
 
-Version 1.0 - 2026-07-03
+Version 1.0 - 2026-07-06
 
 Copyright (c) 2026 Roberto Charreton Kaplun y Attribute Overload.
-Todos los derechos reservados, salvo los permisos otorgados expresamente por
-esta licencia.
+Todos los derechos reservados.
+
+Esta licencia regula el acceso y uso del proyecto **Blockout Director**. El
+hecho de acceder, descargar, copiar, ejecutar, revisar o utilizar cualquier
+parte del proyecto implica la aceptacion plena de los terminos establecidos en
+este documento.
 
 ## 1. Alcance
 
-Esta licencia aplica al proyecto **Blockout Director**, incluyendo su codigo
-fuente, documentacion, archivos de interfaz, estilos, scripts, estructura de
-proyecto y recursos incluidos en este repositorio, salvo que un archivo indique
-una licencia distinta.
+Esta licencia aplica a la totalidad del proyecto **Blockout Director**,
+incluyendo, sin limitacion, codigo fuente, documentacion, archivos de interfaz,
+estilos, scripts, estructura de proyecto, disenos, recursos visuales, recursos
+sonoros, configuraciones, marcas, nombres, logos, textos, conceptos, materiales
+tecnicos y cualquier otro contenido incluido en este repositorio o asociado al
+proyecto, salvo que un archivo indique expresamente una licencia distinta.
 
-Esta licencia permite revisar, usar, copiar, modificar y compartir el proyecto,
-pero limita la venta y la explotacion comercial no autorizada.
+## 2. Titularidad
 
-## 2. Permisos concedidos
+El proyecto y todo su contenido son propiedad de Roberto Charreton Kaplun y
+Attribute Overload, o de sus respectivos titulares cuando se trate de
+componentes de terceros.
 
-Se permite, sin costo y bajo los terminos de esta licencia:
+Ninguna disposicion de esta licencia transfiere propiedad, titularidad, derecho
+de autor, derecho de marca, derecho moral, secreto comercial, know-how ni ningun
+otro derecho de propiedad intelectual o industrial sobre el proyecto o su
+contenido.
 
-- Usar el proyecto para fines personales, educativos, artisticos, de estudio,
-  investigacion, prototipado o evaluacion.
-- Copiar el proyecto y conservar respaldos.
-- Modificar el codigo fuente y crear versiones derivadas.
-- Compartir copias del proyecto original o modificado, siempre que no exista
-  venta, cobro o explotacion comercial no autorizada.
-- Publicar forks o adaptaciones no comerciales, siempre que se conserve la
-  atribucion requerida.
+Todos los derechos no concedidos de forma expresa en esta licencia quedan
+estrictamente reservados.
 
-## 3. Atribucion obligatoria
+## 3. Permiso limitado de uso privado
 
-Toda copia, modificacion, fork, distribucion, publicacion o uso publico del
-proyecto debe incluir una atribucion clara a:
+Se concede un permiso limitado, personal, privado, no exclusivo, revocable,
+intransferible y no sublicenciable para acceder, revisar y ejecutar el proyecto
+unicamente con fines privados, internos, de evaluacion o de referencia tecnica.
 
-**Roberto Charreton Kaplun** y **Attribute Overload**.
+Este permiso no autoriza ningun uso publico, comercial, institucional,
+educativo publicado, promocional, productivo, colaborativo externo ni cualquier
+otro uso que implique compartir, explotar, publicar, transferir o poner el
+proyecto a disposicion de terceros.
 
-La atribucion debe incluirse, como minimo, en el README, documentacion principal
-o pantalla de creditos/acerca de la aplicacion si existe. Se recomienda usar el
-siguiente texto:
+## 4. Prohibicion de modificacion
 
-> Basado en Blockout Director, creado por Roberto Charreton Kaplun y Attribute
-> Overload.
+No se permite modificar, adaptar, transformar, alterar, corregir, traducir,
+descompilar, reestructurar, combinar, portar, convertir, integrar, derivar,
+extraer ni crear obras derivadas basadas total o parcialmente en el proyecto o
+en cualquiera de sus contenidos, salvo autorizacion previa, expresa y por
+escrito de Roberto Charreton Kaplun o Attribute Overload.
 
-Si el proyecto fue modificado, tambien debe indicarse de forma razonable que se
-trata de una version modificada y quien realizo dichos cambios.
+Tambien queda prohibido eliminar, ocultar, alterar o sustituir avisos de
+copyright, atribuciones, marcas, logos, creditos, notas legales o cualquier
+identificacion de titularidad incluida en el proyecto.
 
-## 4. Restriccion de venta y uso comercial
+## 5. Prohibicion de transferencia, distribucion y traspaso
 
-No se permite, sin autorizacion previa y por escrito de Roberto Charreton
-Kaplun o Attribute Overload:
+No se permite vender, donar, ceder, transferir, traspasar, arrendar, prestar,
+licenciar, sublicenciar, publicar, redistribuir, compartir, cargar, hospedar,
+replicar, sincronizar, incorporar en repositorios publicos o privados de
+terceros, entregar como parte de un servicio, incluir en productos, plantillas,
+paquetes, cursos, assets, marketplaces, plataformas, entregables profesionales o
+poner a disposicion de terceros el proyecto o cualquiera de sus contenidos,
+total o parcialmente.
 
-- Vender el proyecto original.
-- Vender copias del proyecto.
-- Vender versiones modificadas, forks o derivados.
-- Cobrar por acceso al proyecto como producto, servicio, plataforma, SaaS,
-  paquete descargable o integracion comercial.
-- Sublicenciar el proyecto con fines comerciales.
-- Incluir el proyecto como parte principal o sustancial de un producto,
-  servicio, curso, plantilla, paquete, asset, marketplace o entrega comercial
-  vendida a terceros.
-- Usar el nombre **Blockout Director**, **Attribute Overload**, **Logo AO** o
-  cualquier marca asociada para promocionar una version comercial no autorizada.
+Esta prohibicion aplica al proyecto original, a cualquier copia, fragmento,
+archivo, estructura, recurso, concepto materializado, documentacion o contenido
+relacionado, independientemente del medio, formato o plataforma de transferencia.
 
-La restriccion anterior no impide estudiar el codigo, hacer pruebas internas,
-crear prototipos no comerciales o usar el proyecto como referencia tecnica,
-siempre que se respeten los demas terminos de esta licencia.
+## 6. Copias permitidas
 
-## 5. Obras derivadas
+Solo se permite conservar copias estrictamente necesarias para respaldo privado
+o ejecucion local, siempre que dichas copias permanezcan bajo control directo de
+la persona autorizada, no sean modificadas, no sean compartidas con terceros y
+mantengan integramente todos los avisos legales, de autoria y de titularidad.
 
-Las obras derivadas o versiones modificadas deben:
+## 7. Uso comercial y explotacion
 
-- Mantener esta licencia o una licencia compatible que conserve, como minimo,
-  las mismas restricciones de atribucion y no venta.
-- Conservar los avisos de copyright y atribucion.
-- Indicar de forma razonable los cambios realizados.
-- No presentarse como version oficial de Roberto Charreton Kaplun o Attribute
-  Overload, salvo autorizacion expresa.
+Queda prohibido cualquier uso comercial, directo o indirecto, del proyecto o de
+su contenido sin autorizacion previa, expresa y por escrito de Roberto
+Charreton Kaplun o Attribute Overload.
 
-## 6. Marcas, logos e identidad
+Esta prohibicion incluye, entre otros, venta, monetizacion, integracion en
+productos o servicios, uso en trabajos para clientes, uso en SaaS, uso en
+consultoria, uso en capacitaciones pagadas, uso en publicidad, uso como base
+para productos derivados, uso en licitaciones, uso como activo profesional y
+cualquier forma de explotacion economica o ventaja comercial.
 
-Esta licencia no concede derechos de marca sobre **Attribute Overload**,
-**Logo AO**, **Blockout Director** ni otros nombres, logos, signos distintivos o
-elementos de identidad asociados.
+## 8. Marcas, nombres e identidad
 
-Puedes conservar las atribuciones necesarias, pero no puedes usar dichas marcas
-para sugerir patrocinio, aprobacion, afiliacion oficial o respaldo de una
-version modificada sin permiso escrito.
+Esta licencia no concede derechos de uso sobre las marcas, nombres comerciales,
+logos, signos distintivos, imagen de marca, identidad visual o reputacion
+asociada a **Blockout Director**, **Attribute Overload**, **Logo AO**, Roberto
+Charreton Kaplun o cualquier otra denominacion vinculada al proyecto.
 
-## 7. Componentes de terceros
+No se permite usar dichos elementos para sugerir patrocinio, aprobacion,
+asociacion, afiliacion, autoria, continuidad oficial o respaldo sin autorizacion
+previa, expresa y por escrito.
 
-El proyecto puede usar librerias, iconos, modelos, fuentes, CDN u otros recursos
-de terceros. Dichos componentes se rigen por sus propias licencias. Esta
-licencia no modifica ni reemplaza los terminos aplicables a esos componentes.
+## 9. Componentes de terceros
 
-## 8. Ausencia de garantia
+El proyecto puede incluir o depender de librerias, frameworks, fuentes, iconos,
+modelos, servicios, herramientas, CDN u otros componentes de terceros. Dichos
+componentes se rigen por sus propias licencias y condiciones.
 
-El proyecto se entrega "tal cual", sin garantias de ningun tipo, expresas o
-implicitas, incluyendo, entre otras, garantias de funcionamiento, idoneidad para
-un proposito particular, compatibilidad, disponibilidad, seguridad o ausencia de
-errores.
-
-El uso del proyecto es bajo tu propio riesgo.
-
-## 9. Limitacion de responsabilidad
-
-En la maxima medida permitida por la ley aplicable, Roberto Charreton Kaplun,
-Attribute Overload y los colaboradores del proyecto no seran responsables por
-danos directos, indirectos, incidentales, especiales, consecuenciales, perdida de
-datos, perdida de ingresos, interrupcion de negocio o cualquier otro perjuicio
-relacionado con el uso, modificacion, distribucion o imposibilidad de uso del
-proyecto.
+Esta licencia no modifica, sustituye ni amplia los derechos u obligaciones
+establecidos por terceros sobre sus respectivos materiales.
 
 ## 10. Terminacion
 
-Los permisos otorgados por esta licencia terminan automaticamente si incumples
-sus terminos. Al terminar la licencia, debes cesar el uso, distribucion,
-publicacion y explotacion del proyecto o de las versiones derivadas que incumplan
-esta licencia.
+El incumplimiento de cualquiera de los terminos de esta licencia terminara de
+forma automatica e inmediata cualquier permiso concedido.
 
-## 11. Permisos comerciales
+En caso de terminacion, la persona infractora debera cesar de inmediato todo
+uso del proyecto, eliminar o devolver todas las copias bajo su control y
+abstenerse de utilizar, publicar, modificar, transferir, explotar o conservar
+contenido del proyecto salvo en la medida estrictamente exigida por la ley
+aplicable.
 
-Para solicitar permiso de venta, licencia comercial, integracion en productos
-pagados, uso de marca o acuerdos especiales, se debe contactar directamente a
-Roberto Charreton Kaplun o Attribute Overload.
+## 11. Ausencia de garantia
 
-## 12. Nota sobre "open source"
+El proyecto se proporciona "tal cual" y "segun disponibilidad", sin garantias
+de ningun tipo, expresas o implicitas, incluyendo, sin limitacion, garantias de
+funcionamiento, idoneidad para un proposito particular, disponibilidad,
+compatibilidad, seguridad, exactitud, continuidad, ausencia de errores o ausencia
+de infraccion.
 
-Este proyecto ofrece acceso al codigo fuente y permite modificacion y
-redistribucion bajo condiciones. Sin embargo, al incluir una restriccion de venta
-y uso comercial, esta licencia no debe interpretarse como una licencia aprobada
-por la Open Source Initiative (OSI). Es una licencia de codigo disponible,
-modificable y no comercial con atribucion obligatoria.
+El uso del proyecto se realiza bajo responsabilidad exclusiva de quien lo use.
+
+## 12. Limitacion de responsabilidad
+
+En la maxima medida permitida por la ley aplicable, Roberto Charreton Kaplun,
+Attribute Overload y cualquier colaborador o titular relacionado no seran
+responsables por danos directos, indirectos, incidentales, especiales,
+consecuenciales, punitivos, perdida de datos, perdida de ingresos, perdida de
+oportunidades, interrupcion de negocio, reclamaciones de terceros o cualquier
+otro perjuicio derivado del acceso, uso, imposibilidad de uso, revision,
+posesion, transferencia no autorizada o explotacion del proyecto.
+
+## 13. Autorizaciones especiales
+
+Cualquier permiso para modificar, transferir, distribuir, publicar, sublicenciar,
+ceder, explotar comercialmente o utilizar el proyecto fuera del uso privado
+permitido debera constar previamente por escrito y estar firmado o confirmado de
+forma expresa por Roberto Charreton Kaplun o Attribute Overload.
+
+La ausencia de respuesta, la disponibilidad publica del repositorio o el acceso
+tecnico al contenido no constituyen autorizacion, renuncia, licencia adicional ni
+consentimiento implicito.
+
+## 14. Naturaleza de la licencia
+
+Este proyecto no se ofrece como software libre ni como software de codigo
+abierto bajo los criterios de la Open Source Initiative (OSI). El acceso al
+codigo o al contenido no implica permiso para modificarlo, distribuirlo,
+transferirlo, publicarlo, explotarlo ni crear obras derivadas.
