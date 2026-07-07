@@ -181,13 +181,6 @@ canvas#c{width:100%;height:100%;display:block;touch-action:none}
 .btn.outline{background:var(--panel-2);border-color:var(--line);color:var(--ink)}
 .btn.outline:hover{background:var(--panel-3);border-color:#3a3d41}
 .btn.danger{color:var(--danger)}
-.btn.mini2{
-  min-height:22px;
-  padding:2px 7px;
-  margin-left:auto;
-  border-color:var(--line);
-  background:var(--panel-2);
-}
 .seg .btn.active{background:var(--accent-soft);color:var(--accent-line);border-color:#1f4a68}
 .w100{width:100%}
 button:focus-visible,.chip:focus-visible,.item:focus-visible,.rail-tab:focus-visible{
@@ -319,7 +312,6 @@ body[data-drawer="shots"] #drawerBody>.card[data-tab="shots"]{display:block}
   transition:transform .15s ease;
   font-size:10px;
 }
-.card .hd .btn.mini2+.chev{margin-left:6px}
 .card.closed .bd{display:none}
 .card.closed .hd .chev{transform:rotate(-90deg)}
 .card .bd{padding:0 10px 12px}
@@ -370,22 +362,19 @@ body[data-drawer="shots"] #drawerBody>.card[data-tab="shots"]{display:block}
   min-height:0;
   overflow:visible;
 }
-#perspPanel .bd{max-height:min(220px,28vh);overflow-y:auto}
 #pipPanel{
   margin-top:auto;
   overflow:hidden;
   border-top:1px solid var(--line);
   border-bottom:0;
 }
-#pipPanel .hd{padding:8px 10px;font-size:11.5px;gap:6px}
-#pipPanel select{flex:1;min-width:0}
-#pipTitle{
+#pipPanel .hd{padding:6px 10px;font-size:11.5px;gap:6px}
+#pipPanel select{
   flex:1;
   min-width:0;
-  overflow:hidden;
-  text-overflow:ellipsis;
-  white-space:nowrap;
-  font-weight:800;
+  padding:3px 6px;
+  font-size:11px;
+  font-weight:600;
 }
 .pip-wrap{position:relative;background:#0a0b0c}
 canvas#pip{width:100%;display:block;background:#0a0b0c;border-top:1px solid var(--line-soft)}
@@ -569,7 +558,8 @@ input[type=checkbox]{accent-color:var(--accent)}
   letter-spacing:.06em;
 }
 .outliner-item{margin-top:0}
-.outliner-empty{
+.outliner-empty,
+.inspector-empty{
   margin-top:8px;
   padding:12px 10px;
   border:1px dashed #3a3d41;

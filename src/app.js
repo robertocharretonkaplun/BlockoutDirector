@@ -74,9 +74,9 @@ controls.target.set(0, 1, 0);
 controls.enableDamping = true; controls.dampingFactor = 0.09;
 controls.maxPolarAngle = Math.PI * 0.495;
 controls.minDistance = 0.4; controls.maxDistance = 160;
-// Clic izquierdo arrastra/orbita; un clic corto sigue seleccionando objetos en pointerup.
-// Rueda = zoom; clic derecho = paneo.
-controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+// Clic derecho = vuelo libre (mirar + WASD, lo gestiona fly más abajo).
+// Clic izquierdo = selección (con Alt orbita); botón central = paneo; rueda = zoom.
+controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.PAN, RIGHT: null };
 
 // cielo degradado
 const skyMat = new THREE.ShaderMaterial({
@@ -196,13 +196,14 @@ $('chkShadows').addEventListener('change', e => { env.shadows = e.target.checked
 $('chkFog').addEventListener('change', e => { env.fog = e.target.checked; applyEnv(); });
 $('chkLabels').addEventListener('change', e => { env.labels = e.target.checked; });
 
-// ---------- navegación estilo Unreal: "vuelo libre" con clic izquierdo + WASD ----------
-// Manteniendo el clic izquierdo el ratón mira alrededor y WASD desplaza la cámara
-// (Q/E baja/sube, Shift acelera, rueda ajusta la velocidad). Un clic simple selecciona.
+// ---------- navegación estilo Unreal: "vuelo libre" con clic derecho + WASD ----------
+// Manteniendo el clic derecho el ratón mira alrededor y WASD desplaza la cámara
+// (Q/E baja/sube, Shift acelera, rueda ajusta la velocidad). El clic izquierdo
+// queda reservado para seleccionar e interactuar con la escena.
 const fly = {
   armed: false, active: false, pointerId: null,
   startX: 0, startY: 0, speed: 6, boost: false,
-  yaw: 0, pitch: 0, consumePick: false,
+  yaw: 0, pitch: 0,
   keys: { w: false, a: false, s: false, d: false, q: false, e: false }
 };
 const FLY_THRESH = 4;                       // px para distinguir clic de arrastre
@@ -259,16 +260,17 @@ function flyTick(dt) {
 const ray = new THREE.Raycaster();
 const pDown = new THREE.Vector2();
 let downOnGizmo = false;
-// captura: decide antes que OrbitControls si el clic izquierdo orbita (Alt) o arma el vuelo
+// captura: Alt+clic izquierdo orbita; el clic derecho arma el vuelo libre
 renderer.domElement.addEventListener('pointerdown', e => {
   if (e.button === 0) {
     controls.mouseButtons.LEFT = e.altKey ? THREE.MOUSE.ROTATE : null;
-    if (!e.altKey && !tc.axis && !tc.dragging) {
-      fly.armed = true; fly.pointerId = e.pointerId;
-      fly.startX = e.clientX; fly.startY = e.clientY;
-    }
+  } else if (e.button === 2 && !tc.dragging) {
+    fly.armed = true; fly.pointerId = e.pointerId;
+    fly.startX = e.clientX; fly.startY = e.clientY;
   }
 }, true);
+// el clic derecho controla la cámara: sin menú contextual sobre el lienzo
+renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
 renderer.domElement.addEventListener('pointerdown', e => {
   pDown.set(e.clientX, e.clientY);
   downOnGizmo = !!tc.axis;
@@ -286,14 +288,14 @@ renderer.domElement.addEventListener('pointermove', e => {
   viewCam.quaternion.setFromEuler(_flyEuler);
   e.preventDefault();
 });
-// captura: termina el vuelo antes que el manejador de selección (fase de burbuja)
+// captura: al soltar el botón derecho termina el vuelo
 renderer.domElement.addEventListener('pointerup', e => {
-  if (fly.active) { exitFly(); fly.consumePick = true; }
+  if (e.button !== 2) return;
+  if (fly.active) exitFly();
   fly.armed = false; fly.pointerId = null;
 }, true);
 renderer.domElement.addEventListener('pointerup', e => {
-  if (fly.consumePick) { fly.consumePick = false; return; }
-  if (e.button !== 0 || downOnGizmo || tc.dragging) return;
+  if (fly.active || e.button !== 0 || downOnGizmo || tc.dragging) return;
   if (Math.hypot(e.clientX - pDown.x, e.clientY - pDown.y) > 5) return;
   pick(e);
 });
@@ -1098,8 +1100,8 @@ function copyText(t) {
 function setSelected(ent) {
   selected = ent;
   if (tc.object) tc.detach();
-  if (ent) { tc.attach(ent.root); renderInspector(); }
-  else $('rightPanel').classList.add('hidden');
+  if (ent) tc.attach(ent.root);
+  renderInspector();
   renderCharList(); renderPropList(); renderPersp();
   // con el editor de trayectorias abierto, la selección sincroniza la entidad activa
   if (ent && tlEnt !== ent && !$('timelinePanel').classList.contains('hidden')) { tlEnt = ent; refreshKfs(); }
@@ -1179,7 +1181,7 @@ function bindTransformInputs(ent) {
   ['tPx','tPy','tPz','tRx','tRy','tRz','tS'].forEach(id => { const el = $(id); if (el) el.addEventListener('change', apply); });
 }
 function syncInspectorFromSel() {
-  if (!selected || $('rightPanel').classList.contains('hidden')) return;
+  if (!selected) return;
   const p = selected.root.position, r = eDeg(selected.root.rotation);
   const set = (id, v) => { const el = $(id); if (el && document.activeElement !== el) el.value = v; };
   set('tPx', p.x.toFixed(2)); set('tPy', p.y.toFixed(2)); set('tPz', p.z.toFixed(2));
@@ -1261,8 +1263,12 @@ function bindPoseBlock(ent) {
 
 function renderInspector() {
   const ent = selected;
-  if (!ent) { $('rightPanel').classList.add('hidden'); return; }
-  $('rightPanel').classList.remove('hidden');
+  // el panel Details siempre está visible: sin selección muestra una leyenda
+  if (!ent) {
+    $('inspTitle').textContent = t('Details');
+    $('inspector').innerHTML = `<div class="inspector-empty">${t('Selecciona un elemento de la escena para ver sus detalles.')}</div>`;
+    return;
+  }
   $('inspTitle').textContent = { character: t('Personaje'), prop: t('Prop'), camera: t('Cámara') }[ent.kind];
   let html = `<div class="lbl">${t('Nombre')}</div><input type="text" id="inspName" value="${escapeHtml(ent.name)}">`;
 
@@ -1456,7 +1462,7 @@ function disposeObject(o) {
 }
 function deleteEnt(ent, noUndo) {
   if (!noUndo) pushUndo();
-  if (selected === ent) { tc.detach(); selected = null; $('rightPanel').classList.add('hidden'); }
+  if (selected === ent) { tc.detach(); selected = null; renderInspector(); }
   if (ent.kind === 'camera') removeCameraEnt(ent);
   else {
     scene.remove(ent.root); disposeObject(ent.root);
@@ -1638,12 +1644,11 @@ function duplicateCamera(ent) {
 }
 function removeCameraEnt(ent) {
   if (viewCam === ent.cam) setViewCamera(null);
-  if (pipEnt === ent) { pipEnt = null; }
+  if (pipEnt === ent) { pipEnt = null; pipChoiceId = null; }
   scene.remove(ent.cam);
   if (ent.pathViz) { scene.remove(ent.pathViz); disposeObject(ent.pathViz); }
   disposeObject(ent.viz);
   const i = R.cameras.indexOf(ent); if (i >= 0) R.cameras.splice(i, 1);
-  if (!pipEnt && R.cameras.length) setPipEnt(R.cameras[0]);
   refreshPipSelect();
   if (tlEnt === ent) { tlEnt = R.cameras[0] || null; refreshKfs(); }
 }
@@ -1697,30 +1702,125 @@ function updatePipGuides() {
   g.classList.remove('hidden');
 }
 
-// ---------- panel de perspectivas ----------
+// ---------- perspectivas: presets de cámara en "Colocar actores" ----------
+// Cada preset crea una cámara con lente y tipo de plano acordes (o la
+// reencuadra si ya existe, buscándola por nombre) y la hace vista activa.
+// "Main Shot" nunca se reencuadra: es la toma compuesta por el usuario.
+const CAM_PRESETS = [
+  { id: 'free',    label: 'Vista libre (Director)' },
+  { id: 'main',    label: 'Main Shot' },
+  { id: 'closeup', label: 'Primer plano',    mm: 85, dist: 1.4, h: 0.10, focusH: 1.50, shotType: 'Primer plano' },
+  { id: 'medium',  label: 'Plano medio',     mm: 50, dist: 2.6, h: 0.25, focusH: 1.25, shotType: 'Plano medio' },
+  { id: 'wide',    label: 'Plano general',   mm: 24, dist: 7.5, h: 0.70, focusH: 1.00, shotType: 'Plano general' },
+  { id: 'ots',     label: 'Sobre el hombro', mm: 50, shotType: 'Over the shoulder' },
+  { id: 'top',     label: 'Vista superior',  mm: 35, shotType: 'Picado' },
+  { id: 'side',    label: 'Vista lateral',   mm: 50, dist: 4.0, h: 0.35, focusH: 1.05, shotType: 'Toma lateral' }
+];
+// punto de interés del preset: la selección, o el centro de los personajes,
+// o el objetivo de órbita actual
+function presetAnchor() {
+  if (selected && selected.kind !== 'camera') return selected.root.position.clone();
+  if (R.characters.length) {
+    const c = new THREE.Vector3();
+    for (const ch of R.characters) c.add(ch.root.position);
+    return c.multiplyScalar(1 / R.characters.length);
+  }
+  return controls.target.clone();
+}
+function presetSubject() {
+  if (selected && selected.kind === 'character') return selected;
+  const a = presetAnchor();
+  let best = null, bd = Infinity;
+  for (const c of R.characters) {
+    const d = c.root.position.distanceToSquared(a);
+    if (d < bd) { bd = d; best = c; }
+  }
+  return best;
+}
+function applyCamPreset(pid) {
+  if (pid === 'current') return;
+  if (pid === 'free') { setViewCamera(null); return; }
+  const p = CAM_PRESETS.find(x => x.id === pid);
+  if (!p) return;
+
+  if (pid === 'main') {
+    let ent = R.cameras.find(c => c.name === 'Main Shot');
+    if (!ent) ent = addCamera({ name: 'Main Shot' });
+    setViewCamera(ent); setSelected(ent);
+    toast(t('Cámara activa: {n}', { n: ent.name }));
+    return;
+  }
+
+  const anchor = presetAnchor();
+  const pos = new THREE.Vector3(), look = new THREE.Vector3();
+  if (pid === 'ots') {
+    // detrás del hombro del personaje seleccionado (o el más cercano al ancla)
+    const subj = presetSubject();
+    if (subj) {
+      const q = new THREE.Quaternion();
+      subj.root.getWorldQuaternion(q);
+      const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(q);
+      fwd.y = 0;
+      if (fwd.lengthSq() < 1e-4) fwd.set(0, 0, 1);
+      fwd.normalize();
+      const right = new THREE.Vector3().crossVectors(fwd, WORLD_UP).normalize();
+      const head = subj.root.position.clone(); head.y += 1.55;
+      pos.copy(head).addScaledVector(fwd, -0.85).addScaledVector(right, 0.45); pos.y += 0.1;
+      look.copy(head).addScaledVector(fwd, 2.6); look.y -= 0.2;
+    } else {
+      pos.copy(anchor).add(new THREE.Vector3(1.8, 1.7, 1.8));
+      look.copy(anchor); look.y += 1.2;
+    }
+  } else if (pid === 'top') {
+    pos.set(anchor.x + 0.01, anchor.y + 9, anchor.z + 0.01);
+    look.copy(anchor);
+  } else {
+    // se encuadra desde el lado en el que está la vista actual
+    const focus = anchor.clone(); focus.y += p.focusH;
+    const dir = new THREE.Vector3().subVectors(viewCam.position, anchor);
+    dir.y = 0;
+    if (dir.lengthSq() < 1e-4) dir.set(0, 0, 1);
+    dir.normalize();
+    if (pid === 'side') dir.crossVectors(WORLD_UP, dir.clone()).normalize();
+    pos.copy(focus).addScaledVector(dir, p.dist); pos.y = focus.y + p.h;
+    look.copy(focus);
+  }
+
+  let ent = R.cameras.find(c => c.name === p.label);
+  if (ent) {
+    pushUndo();
+    ent.cam.position.copy(pos);
+    ent.cam.lookAt(look);
+    ent.cam.setFocalLength(p.mm);
+    ent.shotType = p.shotType;
+    updateFrustumViz(ent);
+    toast(t('Cámara "{n}" reencuadrada', { n: ent.name }));
+  } else {
+    ent = addCamera({ name: p.label, shotType: p.shotType,
+      pos: [pos.x, pos.y, pos.z], lookAt: [look.x, look.y, look.z] });
+    ent.cam.setFocalLength(p.mm);
+    updateFrustumViz(ent);
+    toast(t('Cámara activa: {n}', { n: ent.name }));
+  }
+  setViewCamera(ent);
+  setSelected(ent);
+}
+// la lista desplegable refleja la vista activa; si la cámara actual no
+// corresponde a un preset se muestra como opción informativa "· nombre"
 function renderPersp() {
-  const el = $('perspList'); el.innerHTML = '';
-  const free = document.createElement('div');
-  free.className = 'item' + (viewCam === freeCam ? ' active' : '');
-  free.innerHTML = `<i class="ph ph-globe-simple"></i><span class="nm">${t('Vista libre (Director)')}</span>`;
-  free.onclick = () => setViewCamera(null);
-  el.appendChild(free);
-  const hint = document.createElement('div');
-  hint.className = 'hint asset-hint';
-  hint.textContent = t('Las cámaras creadas aparecen en Outliner.');
-  el.appendChild(hint);
-  renderOutliner();
-  return;
-  for (const c of R.cameras) {
-    const d = document.createElement('div');
-    d.className = 'item' + (viewCam === c.cam ? ' active' : (selected === c ? ' active' : ''));
-    d.innerHTML = `<i class="ph ph-video-camera"></i><span class="nm">${escapeHtml(c.name)}</span><button class="x" title="${t('Eliminar cámara')}">x</button>`;
-    d.onclick = () => { setViewCamera(c); setSelected(c); };
-    d.querySelector('.x').onclick = e => { e.stopPropagation(); deleteEnt(c); };
-    el.appendChild(d);
+  const sel = $('selCamPreset');
+  if (sel) {
+    const match = activeCamEnt && CAM_PRESETS.find(p => p.label === activeCamEnt.name);
+    const active = viewCam === freeCam ? 'free' : (match ? match.id : 'current');
+    let html = CAM_PRESETS.map(p =>
+      `<option value="${p.id}" ${p.id === active ? 'selected' : ''}>${escapeHtml(t(p.label))}</option>`).join('');
+    if (active === 'current')
+      html = `<option value="current" selected>· ${escapeHtml(activeCamEnt.name)}</option>` + html;
+    sel.innerHTML = html;
   }
   renderOutliner();
 }
+$('selCamPreset').addEventListener('change', e => applyCamPreset(e.target.value));
 $('btnAddCam').onclick = () => {
   const ent = addCamera({});
   toast(t('"{n}" creada desde la vista actual', { n: ent.name }));
@@ -1730,25 +1830,27 @@ $('btnAddCam').onclick = () => {
 function mainShotEnt() {
   return R.cameras.find(c => c.name === 'Main Shot') || R.cameras[0] || null;
 }
-function setPipEnt() {
-  pipEnt = mainShotEnt();
+// la cámara elegida en el selector se recuerda por id; si desaparece (o no
+// se eligió ninguna) el preview vuelve a Main Shot / primera cámara
+let pipChoiceId = null;
+function setPipEnt(ent) {
+  pipChoiceId = ent ? ent.id : null;
   refreshPipSelect();
 }
 function refreshPipSelect() {
-  pipEnt = mainShotEnt();
-  const title = $('pipTitle');
-  if (title) title.textContent = pipEnt ? pipEnt.name : 'Main Shot';
+  pipEnt = R.cameras.find(c => c.id === pipChoiceId) || mainShotEnt();
   const sel = $('pipSelect');
   if (sel) {
-    sel.innerHTML = R.cameras.map(c => `<option value="${c.id}" ${pipEnt === c ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('');
-    if (!R.cameras.length) sel.innerHTML = `<option value="">${t('-- sin camaras --')}</option>`;
+    if (R.cameras.length)
+      sel.innerHTML = R.cameras.map(c => `<option value="${c.id}" ${pipEnt === c ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('');
+    else sel.innerHTML = `<option value="">${t('-- sin camaras --')}</option>`;
+    sel.disabled = !R.cameras.length;
   }
   updatePipGuides();
 }
-const pipSelectEl = $('pipSelect');
-if (pipSelectEl) pipSelectEl.addEventListener('change', () => {
-  setPipEnt();
-  updatePipGuides();
+$('pipSelect').addEventListener('change', e => {
+  pipChoiceId = e.target.value || null;
+  refreshPipSelect();
 });
 function renderPip() {
   pipRenderer.setScissorTest(false);
@@ -2405,7 +2507,7 @@ function usedAssets() {
 function clearScene(opts = {}) {
   stopPB();
   setViewCamera(null);
-  tc.detach(); selected = null; $('rightPanel').classList.add('hidden');
+  tc.detach(); selected = null; renderInspector();
   for (const c of R.characters) {
     scene.remove(c.root); disposeObject(c.root);
     if (c.pathViz) { scene.remove(c.pathViz); disposeObject(c.pathViz); }
@@ -2628,7 +2730,7 @@ $('btnGuide').onclick = () => openModal(t('Guia rapida'), `
     <li>${t('Configura <b>Entorno</b> (skybox, suelo, iluminacion).')}</li>
     <li>${t('Anade <b>Personajes</b> (maniquies o GLB) y asignales rol, emocion y pose.')}</li>
     <li>${t('Coloca <b>Props</b> y luces puntuales.')}</li>
-    <li>${t('Navega hasta un buen encuadre y pulsa <b>+</b> en Perspectivas para crear una camara ahi.')}</li>
+    <li>${t('Navega hasta un buen encuadre y pulsa <b>Cámara desde vista</b> en Colocar actores, o elige un preset de perspectiva (primer plano, plano medio, general...).')}</li>
     <li>${t('En el inspector de la camara elige <b>objetivo</b> (14-135 mm), <b>encuadre</b> (16:9, 9:16, 2.39:1, 1:1) y activa la <b>regla de tercios</b> para componer la toma.')}</li>
     <li>${t('Anima camaras, personajes y props con <b>Trayectorias</b>: selecciona la entidad en el timeline, muevela y anade keyframes. Al reproducir, todo lo que tenga keyframes se anima a la vez.')}</li>
     <li>${t('El panel <b>Trayectorias</b> muestra la jerarquia completa de la escena con los keyframes de cada objeto animado; el boton de filas muestra u oculta el editor de keyframes.')}</li>
@@ -2637,11 +2739,11 @@ $('btnGuide').onclick = () => openModal(t('Guia rapida'), `
   </ol>
   <div class="lbl">${t('Controles')}</div>
   <ul style="margin:4px 0;padding-left:18px;line-height:1.7">
-    <li>${t('Navegación estilo Unreal: mantén <b>clic izquierdo</b> y vuela con <b>WASD</b> mientras el ratón mira alrededor (<b>Q/E</b> baja/sube, <b>Shift</b> acelera, la rueda ajusta la velocidad).')}</li>
-    <li>${t('Orbitar: <b>botón central</b> o <b>Alt+clic izquierdo</b>. Paneo: <b>clic derecho</b>. Zoom: <b>rueda</b>.')}</li>
+    <li>${t('Navegación estilo Unreal: mantén <b>clic derecho</b> y vuela con <b>WASD</b> mientras el ratón mira alrededor (<b>Q/E</b> baja/sube, <b>Shift</b> acelera, la rueda ajusta la velocidad).')}</li>
+    <li>${t('Orbitar: <b>Alt+clic izquierdo</b>. Paneo: <b>botón central</b>. Zoom: <b>rueda</b>. Clic izquierdo: <b>seleccionar</b>.')}</li>
     <li>${t('Clic sobre un objeto: seleccionar. <b>W/E/R</b>: mover / rotar / escalar.')}</li>
     <li>${t('<b>F</b>: centrar vista en la seleccion. <b>Supr</b>: eliminar. <b>Ctrl+D</b>: duplicar. <b>Ctrl+Z / Ctrl+Y</b>: deshacer / rehacer.')}</li>
-    <li>${t('En Perspectivas puedes mirar por cualquier camara y reencuadrarla navegando.')}</li>
+    <li>${t('Desde el Outliner o los presets de camara puedes mirar por cualquier camara y reencuadrarla navegando.')}</li>
   </ul>
   <div class="hint">${t('Consejo: entra a la vista de una camara, encuadra navegando y anade keyframes en distintos momentos para crear un travelling suave.')}</div>`);
 
@@ -2800,7 +2902,7 @@ function refreshLanguage() {
   syncEnvUI();
   renderCharList(); renderPropList(); renderPersp(); renderShots(); renderCaps();
   refreshPipSelect(); refreshKfs();
-  if (selected) renderInspector();
+  renderInspector();
   if (!$('launcher').classList.contains('hidden')) renderLauncher();
 }
 function toggleLang() { setLang(getLang() === 'es' ? 'en' : 'es'); refreshLanguage(); }

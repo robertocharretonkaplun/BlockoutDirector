@@ -96,6 +96,16 @@
       </div>
     </div>
 
+    <div class="card" id="cardCams" data-tab="place">
+      <div class="hd" data-i18n><i class="ph ph-video-camera"></i> Cámaras <span class="chev">v</span></div>
+      <div class="bd">
+        <div class="lbl" data-i18n>Perspectivas</div>
+        <select id="selCamPreset"></select>
+        <button class="btn outline w100" id="btnAddCam" style="margin-top:8px" data-i18n data-i18n-title title="Crear cámara desde la vista actual"><i class="ph ph-plus"></i> Cámara desde vista</button>
+        <div class="hint" data-i18n>Los presets crean o reencuadran una cámara y la activan en el viewport.</div>
+      </div>
+    </div>
+
     <div class="card" id="cardWorld" data-tab="world">
       <div class="hd" data-i18n><i class="ph ph-article"></i> Datos de escena <span class="chev">v</span></div>
       <div class="bd" id="worldSettingsBody">
@@ -150,18 +160,13 @@
     </div>
   </div>
 
-  <aside id="rightPanel" class="card hidden">
+  <aside id="rightPanel" class="card">
     <div class="hd" id="inspTitle">Details</div>
-    <div class="bd" id="inspector"></div>
+    <div class="bd" id="inspector"><div class="inspector-empty" data-i18n>Selecciona un elemento de la escena para ver sus detalles.</div></div>
   </aside>
 
-  <div id="perspPanel" class="card collap">
-    <div class="hd" data-i18n><i class="ph ph-video-camera"></i> Perspectivas <button class="btn mini2" id="btnAddCam" data-i18n-title title="Crear cámara desde la vista actual"><i class="ph ph-plus"></i></button><span class="chev">v</span></div>
-    <div class="bd" id="perspList"></div>
-  </div>
-
   <div id="pipPanel" class="card">
-    <div class="hd"><i class="ph ph-monitor-play"></i> <span id="pipTitle">Main Shot</span><span class="hint" style="margin:0;flex-shrink:0" data-i18n>Preview final</span></div>
+    <div class="hd"><i class="ph ph-monitor-play"></i> <select id="pipSelect" data-i18n-title title="Cámara del preview final"></select><span class="hint" style="margin:0;flex-shrink:0" data-i18n>Preview final</span></div>
     <div class="pip-wrap">
       <canvas id="pip" width="728" height="410"></canvas>
       <div id="pipGuides" class="hidden">

@@ -36,6 +36,17 @@ const DICT = {
   'Entorno': 'Environment',
   'Ocultar panel': 'Hide panel',
 
+  // --- presets de cámara / preview ---
+  'Cámara desde vista': 'Camera from view',
+  'Sobre el hombro': 'Over the shoulder',
+  'Vista superior': 'Top view',
+  'Vista lateral': 'Side view',
+  'Los presets crean o reencuadran una cámara y la activan en el viewport.': 'Presets create or reframe a camera and set it as the active view.',
+  'Cámara "{n}" reencuadrada': 'Camera "{n}" reframed',
+  'Cámara activa: {n}': 'Active camera: {n}',
+  'Cámara del preview final': 'Final preview camera',
+  'Selecciona un elemento de la escena para ver sus detalles.': 'Select a scene element to see its details.',
+
   // --- panel de escena / entorno ---
   'Outliner': 'Outliner',
   'World Settings': 'World Settings',
@@ -258,15 +269,15 @@ const DICT = {
   'Configura <b>Entorno</b> (skybox, suelo, iluminacion).': 'Set up the <b>Environment</b> (skybox, floor, lighting).',
   'Anade <b>Personajes</b> (maniquies o GLB) y asignales rol, emocion y pose.': 'Add <b>Characters</b> (mannequins or GLB) and assign them role, emotion and pose.',
   'Coloca <b>Props</b> y luces puntuales.': 'Place <b>Props</b> and point lights.',
-  'Navega hasta un buen encuadre y pulsa <b>+</b> en Perspectivas para crear una camara ahi.': 'Navigate to a good framing and press <b>+</b> in Perspectives to create a camera there.',
+  'Navega hasta un buen encuadre y pulsa <b>Cámara desde vista</b> en Colocar actores, o elige un preset de perspectiva (primer plano, plano medio, general...).': 'Navigate to a good framing and press <b>Camera from view</b> in Place Actors, or pick a perspective preset (close-up, medium shot, wide...).',
   'En el inspector de la camara elige <b>objetivo</b> (14-135 mm), <b>encuadre</b> (16:9, 9:16, 2.39:1, 1:1) y activa la <b>regla de tercios</b> para componer la toma.': 'In the camera inspector pick a <b>lens</b> (14-135 mm), a <b>frame</b> (16:9, 9:16, 2.39:1, 1:1) and enable the <b>rule of thirds</b> to compose the shot.',
   'Anima camaras, personajes y props con <b>Trayectorias</b>: selecciona la entidad en el timeline, muevela y anade keyframes. Al reproducir, todo lo que tenga keyframes se anima a la vez.': 'Animate cameras, characters and props with <b>Trajectories</b>: pick the entity in the timeline, move it and add keyframes. On playback, everything with keyframes animates at once.',
   'El panel <b>Trayectorias</b> muestra la jerarquia completa de la escena con los keyframes de cada objeto animado; el boton de filas muestra u oculta el editor de keyframes.': 'The <b>Trajectories</b> panel shows the full scene hierarchy with the keyframes of every animated object; the rows button shows or hides the keyframe editor.',
   '<b>Capturar</b> genera un JPG limpio con el encuadre de la camara; <b>Guardar toma</b> ademas guarda encuadre, notas y un prompt listo para IA; el boton de video exporta la trayectoria como WebM.': '<b>Capture</b> renders a clean JPG with the camera frame; <b>Save shot</b> also stores framing, notes and an AI-ready prompt; the video button exports the trajectory as WebM.',
   '<b>Guardar</b> en el navegador o <b>Exportar</b> como archivo .json (incluye GLB y capturas). En <b>Proyectos</b> encuentras todo lo guardado.': '<b>Save</b> in the browser or <b>Export</b> as a .json file (includes GLB and captures). In <b>Projects</b> you will find everything you saved.',
   'Controles': 'Controls',
-  'Navegación estilo Unreal: mantén <b>clic izquierdo</b> y vuela con <b>WASD</b> mientras el ratón mira alrededor (<b>Q/E</b> baja/sube, <b>Shift</b> acelera, la rueda ajusta la velocidad).': 'Unreal-style navigation: hold <b>left click</b> and fly with <b>WASD</b> while the mouse looks around (<b>Q/E</b> down/up, <b>Shift</b> speeds up, the wheel adjusts speed).',
-  'Orbitar: <b>botón central</b> o <b>Alt+clic izquierdo</b>. Paneo: <b>clic derecho</b>. Zoom: <b>rueda</b>.': 'Orbit: <b>middle button</b> or <b>Alt+left click</b>. Pan: <b>right click</b>. Zoom: <b>wheel</b>.',
+  'Navegación estilo Unreal: mantén <b>clic derecho</b> y vuela con <b>WASD</b> mientras el ratón mira alrededor (<b>Q/E</b> baja/sube, <b>Shift</b> acelera, la rueda ajusta la velocidad).': 'Unreal-style navigation: hold <b>right click</b> and fly with <b>WASD</b> while the mouse looks around (<b>Q/E</b> down/up, <b>Shift</b> speeds up, the wheel adjusts speed).',
+  'Orbitar: <b>Alt+clic izquierdo</b>. Paneo: <b>botón central</b>. Zoom: <b>rueda</b>. Clic izquierdo: <b>seleccionar</b>.': 'Orbit: <b>Alt+left click</b>. Pan: <b>middle button</b>. Zoom: <b>wheel</b>. Left click: <b>select</b>.',
   'Clic sobre un objeto: seleccionar. <b>W/E/R</b>: mover / rotar / escalar.': 'Click an object: select. <b>W/E/R</b>: move / rotate / scale.',
   // HUD de vuelo libre
   'Vuelo libre': 'Free flight',
@@ -275,7 +286,7 @@ const DICT = {
   'rápido': 'faster',
   'rueda: velocidad': 'wheel: speed',
   '<b>F</b>: centrar vista en la seleccion. <b>Supr</b>: eliminar. <b>Ctrl+D</b>: duplicar. <b>Ctrl+Z / Ctrl+Y</b>: deshacer / rehacer.': '<b>F</b>: focus view on selection. <b>Del</b>: delete. <b>Ctrl+D</b>: duplicate. <b>Ctrl+Z / Ctrl+Y</b>: undo / redo.',
-  'En Perspectivas puedes mirar por cualquier camara y reencuadrarla navegando.': 'In Perspectives you can look through any camera and reframe it by navigating.',
+  'Desde el Outliner o los presets de camara puedes mirar por cualquier camara y reencuadrarla navegando.': 'From the Outliner or the camera presets you can look through any camera and reframe it by navigating.',
   'Consejo: entra a la vista de una camara, encuadra navegando y anade keyframes en distintos momentos para crear un travelling suave.': 'Tip: enter a camera view, frame by navigating and add keyframes at different times to create a smooth dolly move.',
 
   // --- escena de ejemplo ---

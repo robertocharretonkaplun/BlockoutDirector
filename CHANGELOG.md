@@ -7,7 +7,40 @@ y el proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
 
 ---
 
-## [0.9.0] - 2026-07-06
+## [0.10.0] - 2026-07-07
+
+### Añadido
+- **Presets de perspectiva en Colocar actores**: la antigua sección
+  Perspectivas del dock derecho se integra como lista desplegable en una nueva
+  tarjeta **Cámaras** (pestaña Colocar actores) con: Vista libre (Director),
+  Main Shot, Primer plano (85 mm), Plano medio (50 mm), Plano general (24 mm),
+  Sobre el hombro, Vista superior y Vista lateral. Elegir un preset crea la
+  cámara (o la reencuadra si ya existe, buscándola por nombre) con lente y
+  tipo de plano acordes, y la convierte en la vista activa; Main Shot nunca se
+  reencuadra. El desplegable refleja siempre la cámara activa (las cámaras
+  que no son preset se muestran como «· nombre»). El botón **Cámara desde
+  vista** sigue creando una cámara desde el encuadre actual.
+- **Selector de cámara en el preview Main Shot**: la cabecera del panel de
+  preview final ahora es un desplegable con todas las cámaras de la escena
+  para probar composición y encuadre; la elección se recuerda y, si la cámara
+  se elimina, el preview vuelve a Main Shot.
+
+### Cambiado
+- **Controles de cámara estilo editor profesional**: el vuelo libre
+  (mirar + WASD) pasa del clic izquierdo al **clic derecho**, como en Unreal;
+  el **clic izquierdo** queda reservado para seleccionar e interactuar con la
+  escena (Alt+izquierdo orbita); el **botón central** panea y la **rueda**
+  hace zoom (en vuelo ajusta la velocidad). El menú contextual del navegador
+  queda desactivado sobre el viewport. Guía rápida actualizada.
+- **El panel Details siempre está visible** como sección propia del dock
+  derecho (bajo el Outliner): sin selección muestra la leyenda «Selecciona un
+  elemento de la escena para ver sus detalles» en lugar de desaparecer.
+
+### Eliminado
+- Panel **Perspectivas** del dock derecho (sustituido por los presets de
+  cámara y el Outliner, donde ya se listaban las cámaras).
+
+
 
 ### Añadido
 - **Rail vertical de pestañas estilo Unreal Engine** en el borde izquierdo:
