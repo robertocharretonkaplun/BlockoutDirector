@@ -36,6 +36,14 @@ y el proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
   derecho (bajo el Outliner): sin selección muestra la leyenda «Selecciona un
   elemento de la escena para ver sus detalles» en lugar de desaparecer.
 
+### Corregido
+- **Pantalla negra en GitHub Pages tras publicar**: el navegador podía
+  combinar un `app.js` cacheado de la versión anterior con el `index.html`
+  nuevo (Pages cachea 10 min), lo que rompía el arranque antes de iniciar el
+  render. Los archivos propios (`styles.css`, `app.js` y sus imports) llevan
+  ahora un sufijo de versión `?v=` que se actualiza en cada release e
+  invalida la caché de forma atómica.
+
 ### Eliminado
 - Panel **Perspectivas** del dock derecho (sustituido por los presets de
   cámara y el Outliner, donde ya se listaban las cámaras).

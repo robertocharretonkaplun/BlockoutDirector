@@ -2,9 +2,10 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { createPromptTools } from './promptTools.js';
-import { t, getLang, setLang, applyStaticI18n } from './i18n.js';
-import { initDockUI } from './dock.js';
+// los ?v= deben coincidir con el de index.html: invalidan la caché al publicar
+import { createPromptTools } from './promptTools.js?v=0.10.0';
+import { t, getLang, setLang, applyStaticI18n } from './i18n.js?v=0.10.0';
+import { initDockUI } from './dock.js?v=0.10.0';
 
 /* ============================================================
    NUCLEO - utilidades, estado, escena base, selección, render
