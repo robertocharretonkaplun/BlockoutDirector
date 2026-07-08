@@ -1007,6 +1007,11 @@ html[lang=en] #lcGrid:empty::after{content:'No saved projects yet. Create a new 
 .ng-openscene{width:100%;justify-content:center;margin-top:4px;background:var(--accent-soft);border-color:#1f4a68;color:var(--accent-line)}
 .ng-openscene:hover{background:#1c405c}
 .ng-openscene.on{background:var(--panel-2);color:var(--muted);cursor:default}
+.ng-bound{color:var(--accent-line);font-size:11px;vertical-align:-1px}
+.ng-bound .ph{font-size:12px}
+.ng-promptout{width:100%;font-family:var(--font-mono);font-size:10.5px;line-height:1.5;color:var(--ink);background:var(--surface-low);resize:vertical}
+.ng-copyprompt{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:700}
+.ng-copyprompt:hover{background:#43a9e2}
 .ng-port{
   position:absolute;
   top:11px;

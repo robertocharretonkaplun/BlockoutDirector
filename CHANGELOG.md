@@ -7,6 +7,23 @@ y el proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
 
 ---
 
+## [0.16.0] - 2026-07-08
+
+### Añadido (Scene Graph)
+- **Nodo de Personaje vinculado al actor (fuente única, sin duplicar texto)**:
+  al vincular un actor, sus campos **Rol narrativo, Emoción y Notas
+  narrativas** se comparten con los detalles del actor de la escena (marcados
+  con un icono de enlace). Editarlos en el nodo actualiza al actor y
+  viceversa; el título del nodo es el nombre del actor y renombrarlo renombra
+  al actor. Los campos propios del nodo (imagen, postura, vestuario, notas de
+  dirección actoral) siguen siendo de planeación. El mecanismo de vínculo es
+  reutilizable para otros nodos.
+- **Nodo Prompt resultante**: agrega el contenido de todos los nodos
+  conectados a su entrada (personajes, tomas, referencias, notas) en un prompt
+  con encabezado de escena, más una instrucción inicial opcional. Tiene botón
+  **Copiar prompt** y **Regenerar**, y se actualiza solo al cambiar las
+  conexiones o los datos de los nodos conectados.
+
 ## [0.15.1] - 2026-07-08
 
 ### Corregido

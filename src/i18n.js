@@ -118,6 +118,14 @@ const DICT = {
   'Desglose de esta escena. El Production Graph (barra superior) es el mapa de la película.': 'Breakdown of this scene. The Production Graph (top bar) is the film map.',
   'Clic derecho: añadir escena · un Nodo de Escena carga su mundo 3D · rueda: zoom': 'Right-click: add scene · a Scene Node loads its 3D world · wheel: zoom',
 
+  // --- vínculo actor↔nodo y nodo de prompt ---
+  'Se sincroniza con los detalles del actor': 'Synced with the actor details',
+  'Prompt resultante': 'Resulting prompt',
+  'Instrucción inicial (opcional)': 'Initial instruction (optional)',
+  'Prompt generado': 'Generated prompt',
+  'Regenerar': 'Regenerate',
+  'Conecta nodos a la entrada de este nodo para generar el prompt.': 'Connect nodes to this node input to generate the prompt.',
+
   // --- panel de escena / entorno ---
   'Outliner': 'Outliner',
   'World Settings': 'World Settings',

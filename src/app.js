@@ -3,10 +3,10 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 // los ?v= deben coincidir con el de index.html: invalidan la caché al publicar
-import { createPromptTools } from './promptTools.js?v=0.15.1';
-import { t, getLang, setLang, applyStaticI18n } from './i18n.js?v=0.15.1';
-import { initDockUI } from './dock.js?v=0.15.1';
-import { initNodeGraph } from './nodeGraph.js?v=0.15.1';
+import { createPromptTools } from './promptTools.js?v=0.16.0';
+import { t, getLang, setLang, applyStaticI18n } from './i18n.js?v=0.16.0';
+import { initDockUI } from './dock.js?v=0.16.0';
+import { initNodeGraph } from './nodeGraph.js?v=0.16.0';
 
 /* ============================================================
    NUCLEO - utilidades, estado, escena base, selección, render
@@ -557,6 +557,19 @@ const nodeHost = {
   // --- Scene Graph ---
   listCharacters: () => R.characters.map(c => ({ id: c.id, name: c.name, color: c.colorHex })),
   getCharacter: id => { const c = R.characters.find(x => x.id === id); return c ? { id: c.id, name: c.name } : null; },
+  // detalles del actor compartidos con el nodo de personaje (fuente única)
+  getActor: id => { const c = R.characters.find(x => x.id === id); return c ? { id: c.id, name: c.name, role: c.role || '', emotion: c.emotion || '', notes: c.notes || '' } : null; },
+  setActor: (id, patch) => {
+    const c = R.characters.find(x => x.id === id); if (!c) return;
+    if ('name' in patch && patch.name) c.name = patch.name;
+    if ('role' in patch) c.role = patch.role;
+    if ('emotion' in patch) c.emotion = patch.emotion;
+    if ('notes' in patch) c.notes = patch.notes;
+    renderCharList();
+    if (selected === c) renderInspector();
+  },
+  copyText: txt => copyText(txt),
+  sceneInfo: () => ({ name: sceneName, description: sceneDesc }),
   listShots: () => R.shots.map(s => ({ id: s.id, name: s.name, thumb: s.thumb, shotType: s.shotType, fov: s.camState && s.camState.fov })),
   getShot: id => { const s = R.shots.find(x => x.id === id); return s ? { id: s.id, name: s.name, shotType: s.shotType, thumb: s.thumb, fov: s.camState && s.camState.fov } : null; },
   captureViewport: () => { try { renderToCapCanvas(activeCamEnt); return thumbFromCap(0.82); } catch { return ''; } },

@@ -53,12 +53,16 @@ const NODE_TYPES = {
     ]
   },
   character: {
-    label: 'Nodo de Personaje', icon: 'ph-person', color: '#c06a2f', w: 240,
+    label: 'Nodo de Personaje', icon: 'ph-person', color: '#c06a2f', w: 244,
+    // los campos con `bind` comparten dato con el actor de la escena (fuente
+    // única): editarlos aquí actualiza los detalles del actor y viceversa
+    bindEntity: 'actor', idKey: 'actorId',
     fields: [
       { k: 'actorId', t: 'Actor del editor', ui: 'actor' },
+      { k: 'role', t: 'Rol narrativo', ui: 'text', bind: 'role' },
+      { k: 'emotion', t: 'Emoción / expresión', ui: 'text', bind: 'emotion' },
+      { k: 'notes', t: 'Notas narrativas', ui: 'textarea', bind: 'notes' },
       { k: 'image', t: 'Imagen de referencia', ui: 'image' },
-      { k: 'description', t: 'Descripción', ui: 'textarea' },
-      { k: 'emotion', t: 'Emoción / intención', ui: 'text' },
       { k: 'posture', t: 'Postura / actitud', ui: 'text' },
       { k: 'wardrobe', t: 'Vestuario / apariencia', ui: 'textarea' },
       { k: 'direction', t: 'Notas de dirección actoral', ui: 'textarea' }
@@ -85,12 +89,20 @@ const NODE_TYPES = {
     fields: [
       { k: 'text', t: 'Texto', ui: 'textarea-lg' }
     ]
+  },
+  // agrega el contenido de los nodos conectados a su entrada en un prompt copiable
+  prompt: {
+    label: 'Prompt resultante', icon: 'ph-sparkle', color: '#b0842f', w: 300,
+    fields: [
+      { k: 'intro', t: 'Instrucción inicial (opcional)', ui: 'textarea' },
+      { k: '_out', t: 'Prompt generado', ui: 'promptOut' }
+    ]
   }
 };
 // tipos de nodo ofrecidos en el menú según el modo del grafo
 const MODE_TYPES = {
   production: ['sceneNode', 'imageRef', 'videoRef', 'note'],
-  scene: ['shot', 'character', 'imageRef', 'videoRef', 'note']
+  scene: ['shot', 'character', 'imageRef', 'videoRef', 'note', 'prompt']
 };
 const PORT_Y = 18;   // altura del puerto respecto al borde superior del nodo
 
@@ -129,6 +141,29 @@ export function initNodeGraph(host) {
     const def = typeDef(n);
     const val = n.data[f.k] ?? '';
     const lbl = `<div class="ng-f-lbl">${esc(t(f.t))}</div>`;
+    // campo vinculado a una entidad de la escena (datos del actor): si hay
+    // vínculo, se muestra/edita su dato (fuente única, sin duplicar texto)
+    if (f.bind) {
+      const id = def.idKey ? n.data[def.idKey] : null;
+      const ent = id && host.getActor ? host.getActor(id) : null;
+      if (ent) {
+        const v = ent[f.bind] ?? '';
+        const lblb = `<div class="ng-f-lbl">${esc(t(f.t))} <span class="ng-bound" title="${esc(t('Se sincroniza con los detalles del actor'))}"><i class="ph ph-link-simple"></i></span></div>`;
+        return lblb + (f.ui === 'textarea'
+          ? `<textarea data-bind="${f.bind}" rows="2">${esc(v)}</textarea>`
+          : `<input type="text" data-bind="${f.bind}" value="${esc(v)}">`);
+      }
+      // sin vínculo: cae a un campo propio del nodo (planeación libre)
+    }
+    if (f.ui === 'promptOut') {
+      const txt = buildPrompt(n);
+      return `<div class="ng-f-lbl">${esc(t(f.t))}</div>
+        <textarea class="ng-promptout" rows="8" readonly>${esc(txt)}</textarea>
+        <div class="ng-imgbtns">
+          <button class="ng-linkbtn ng-copyprompt" data-copyprompt><i class="ph ph-copy"></i> ${esc(t('Copiar prompt'))}</button>
+          <button class="ng-linkbtn" data-regen><i class="ph ph-arrows-clockwise"></i> ${esc(t('Regenerar'))}</button>
+        </div>`;
+    }
     if (f.ui === 'text')
       return lbl + `<input type="text" data-k="${f.k}" value="${esc(val)}">`;
     if (f.ui === 'textarea' || f.ui === 'textarea-lg')
@@ -186,6 +221,16 @@ export function initNodeGraph(host) {
     return lbl;
   }
 
+  // título mostrado: para un personaje vinculado sigue el nombre del actor
+  function displayTitle(n) {
+    const def = typeDef(n);
+    if (def.bindEntity === 'actor' && def.idKey && n.data[def.idKey] && host.getActor) {
+      const a = host.getActor(n.data[def.idKey]);
+      if (a && a.name) return a.name;
+    }
+    return n.title || t(def.label);
+  }
+
   function buildNode(n) {
     const def = typeDef(n);
     const el = document.createElement('div');
@@ -195,7 +240,7 @@ export function initNodeGraph(host) {
     el.innerHTML = `
       <div class="ng-node-hd" style="background:${def.color}">
         <i class="ph ${def.icon}"></i>
-        <span class="ng-node-title" contenteditable="true" spellcheck="false">${esc(n.title || t(def.label))}</span>
+        <span class="ng-node-title" contenteditable="true" spellcheck="false">${esc(displayTitle(n))}</span>
         <button class="ng-node-btn" data-collapse title="${esc(t('Plegar / desplegar'))}"><i class="ph ph-caret-up"></i></button>
         <button class="ng-node-btn" data-dup title="${esc(t('Duplicar'))}"><i class="ph ph-copy"></i></button>
         <button class="ng-node-btn" data-del title="${esc(t('Eliminar'))}"><i class="ph ph-trash"></i></button>
@@ -233,12 +278,18 @@ export function initNodeGraph(host) {
     });
     el.addEventListener('pointerdown', () => selectNode(n.id));
 
-    // título editable: si coincide con la etiqueta por defecto se guarda vacío
-    // para que siga el idioma; cualquier otro texto queda como nombre propio
+    // título editable. Para un personaje vinculado, el título ES el nombre del
+    // actor: editarlo renombra el actor (fuente única). En el resto, si coincide
+    // con la etiqueta por defecto se guarda vacío para que siga el idioma.
     title.addEventListener('blur', () => {
       const txt = title.textContent.trim();
-      n.title = (!txt || txt === t(typeDef(n).label)) ? '' : txt;
-      title.textContent = n.title || t(typeDef(n).label);
+      const def = typeDef(n);
+      if (def.bindEntity === 'actor' && def.idKey && n.data[def.idKey] && host.setActor) {
+        if (txt) host.setActor(n.data[def.idKey], { name: txt });
+        title.textContent = displayTitle(n); save(); return;
+      }
+      n.title = (!txt || txt === t(def.label)) ? '' : txt;
+      title.textContent = n.title || t(def.label);
       save();
     });
     title.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); title.blur(); } });
@@ -261,9 +312,19 @@ export function initNodeGraph(host) {
         if (inp.dataset.shot !== undefined) applyShotLink(n, inp.value);
         if (inp.dataset.actor !== undefined) { renderNode(n); }
         if (inp.dataset.scenebind !== undefined) { if (inp.value && !n.title) n.title = inp.value; renderNode(n); }
-        save();
+        regenPrompts(); save();
       });
     });
+    // campos vinculados al actor: escriben en los detalles del actor (fuente única)
+    el.querySelectorAll('.ng-node-bd [data-bind]').forEach(inp => {
+      inp.addEventListener('input', () => {
+        const def = typeDef(n), id = def.idKey ? n.data[def.idKey] : null;
+        if (id && host.setActor) host.setActor(id, { [inp.dataset.bind]: inp.value });
+        regenPrompts(); save();
+      });
+    });
+    el.querySelectorAll('[data-copyprompt]').forEach(b => b.onclick = () => host.copyText && host.copyText(buildPrompt(n)));
+    el.querySelectorAll('[data-regen]').forEach(b => b.onclick = () => renderNode(n));
     el.querySelectorAll('[data-focus]').forEach(b => b.onclick = () => host.focusActor(b.dataset.focus));
     el.querySelectorAll('[data-openscene]').forEach(b => b.onclick = () => host.loadScene && host.loadScene(b.dataset.openscene));
     el.querySelectorAll('[data-upload]').forEach(b => b.onclick = () => pickImage(n, b.dataset.upload));
@@ -388,12 +449,63 @@ export function initNodeGraph(host) {
     if (fromId === toId) return;
     if (G.links.some(l => l.from === fromId && l.to === toId)) return;
     G.links.push({ id: nid(), from: fromId, to: toId });
-    drawLinks(); save();
+    drawLinks(); regenPrompts(); save();
   }
   function removeLink(id) {
     const i = G.links.findIndex(l => l.id === id);
-    if (i >= 0) { G.links.splice(i, 1); drawLinks(); save(); }
+    if (i >= 0) { G.links.splice(i, 1); drawLinks(); regenPrompts(); save(); }
   }
+
+  // ---------- nodo Prompt: agrega los nodos conectados a su entrada ----------
+  // todos los nodos que llegan (directa o transitivamente) a la entrada de id
+  function ancestorsOf(id) {
+    const seen = new Set(), stack = [id];
+    while (stack.length) {
+      const cur = stack.pop();
+      for (const l of G.links) if (l.to === cur && !seen.has(l.from)) { seen.add(l.from); stack.push(l.from); }
+    }
+    return [...seen].map(nodeById).filter(Boolean);
+  }
+  function nodeText(n) {
+    const d = n.data || {};
+    if (n.type === 'character') {
+      const a = d.actorId && host.getActor ? host.getActor(d.actorId) : null;
+      const name = a ? a.name : displayTitle(n);
+      const role = a ? a.role : (d.role || '');
+      const emotion = a ? a.emotion : (d.emotion || '');
+      const notes = a ? a.notes : (d.notes || '');
+      const p = [`${name}${role ? ' (' + role + ')' : ''}`];
+      if (emotion) p.push(t('emoción') + ': ' + emotion);
+      if (d.posture) p.push(t('Postura / actitud') + ': ' + d.posture);
+      if (d.wardrobe) p.push(t('Vestuario / apariencia') + ': ' + d.wardrobe);
+      if (d.direction) p.push(t('Notas de dirección actoral') + ': ' + d.direction);
+      if (notes) p.push(notes);
+      return '- ' + t('Personaje') + ': ' + p.join('. ');
+    }
+    if (n.type === 'shot') {
+      const p = [d.shotType, d.angle, d.movement, d.fov ? t('Objetivo') + ' ' + d.fov : ''].filter(Boolean);
+      let s = '- ' + t('Toma') + (d.number ? ' ' + d.number : '') + (p.length ? ': ' + p.join(', ') : '');
+      if (d.description) s += '. ' + d.description;
+      if (d.notes) s += '. ' + d.notes;
+      if (d.continuity) s += '. ' + t('Notas de continuidad') + ': ' + d.continuity;
+      return s;
+    }
+    if (n.type === 'imageRef') return '- ' + t('Referencia Visual') + (d.category ? ' (' + t(d.category) + ')' : '') + (d.description ? ': ' + d.description : '');
+    if (n.type === 'videoRef') return '- ' + t('Video de Referencia') + (d.description ? ': ' + d.description : '');
+    if (n.type === 'note') return '- ' + (n.title ? n.title + ': ' : '') + (d.text || '');
+    return '';
+  }
+  function buildPrompt(promptNode) {
+    const anc = ancestorsOf(promptNode.id).filter(n => n.type !== 'prompt');
+    const lines = anc.map(nodeText).filter(Boolean);
+    const info = host.sceneInfo ? host.sceneInfo() : null;
+    let out = '';
+    if (promptNode.data.intro) out += promptNode.data.intro.trim() + '\n\n';
+    if (info && info.name) out += t('Escena') + ': ' + info.name + (info.description ? ' — ' + info.description : '') + '\n';
+    out += lines.join('\n');
+    return out.trim() || t('Conecta nodos a la entrada de este nodo para generar el prompt.');
+  }
+  function regenPrompts() { if (mode !== 'scene') return; for (const n of G.nodes) if (n.type === 'prompt') renderNode(n); }
 
   // ---------- alta/baja de nodos ----------
   function addNode(type, wx, wy) {
