@@ -878,8 +878,8 @@ html[lang=en] #lcGrid:empty::after{content:'No saved projects yet. Create a new 
 /* ---------- compactación responsive ---------- */
 @media (max-width: 1380px){
   :root{--drawer-w:260px;--panel-w-r:330px}
-  #topbar .file-menu .btn{width:32px;padding-left:7px;padding-right:7px}
-  #topbar .file-menu .btn-label{display:none}
+  #topbar .file-menu .btn,#topbar .graph-menu .btn{width:32px;padding-left:7px;padding-right:7px}
+  #topbar .file-menu .btn-label,#topbar .graph-menu .btn-label{display:none}
 }
 @media (max-width: 1120px){
   :root{--drawer-w:240px;--panel-w-r:300px}
@@ -1004,6 +1004,9 @@ html[lang=en] #lcGrid:empty::after{content:'No saved projects yet. Create a new 
   border:1px solid var(--line);border-radius:var(--r-ctrl);cursor:pointer;font-family:inherit;
 }
 .ng-linkbtn:hover{background:var(--panel-3)}
+.ng-openscene{width:100%;justify-content:center;margin-top:4px;background:var(--accent-soft);border-color:#1f4a68;color:var(--accent-line)}
+.ng-openscene:hover{background:#1c405c}
+.ng-openscene.on{background:var(--panel-2);color:var(--muted);cursor:default}
 .ng-port{
   position:absolute;
   top:11px;

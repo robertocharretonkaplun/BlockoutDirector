@@ -3,10 +3,10 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 // los ?v= deben coincidir con el de index.html: invalidan la caché al publicar
-import { createPromptTools } from './promptTools.js?v=0.14.0';
-import { t, getLang, setLang, applyStaticI18n } from './i18n.js?v=0.14.0';
-import { initDockUI } from './dock.js?v=0.14.0';
-import { initNodeGraph } from './nodeGraph.js?v=0.14.0';
+import { createPromptTools } from './promptTools.js?v=0.15.1';
+import { t, getLang, setLang, applyStaticI18n } from './i18n.js?v=0.15.1';
+import { initDockUI } from './dock.js?v=0.15.1';
+import { initNodeGraph } from './nodeGraph.js?v=0.15.1';
 
 /* ============================================================
    NUCLEO - utilidades, estado, escena base, selección, render
@@ -491,23 +491,92 @@ addEventListener('blur', () => { for (const k in fly.keys) fly.keys[k] = false; 
 // rail de pestañas verticales + drawer izquierdo (estilo Unreal)
 initDockUI();
 
-// ---------- editor de nodos (dirección cinematográfica) ----------
-// Se abre desde World Settings; el grafo vive en R.nodeGraph y viaja con la
-// escena (guardar/exportar/undo). El host expone los datos y las acciones que
-// el editor necesita del resto de la app (actores, tomas, capturas).
+// ---------- capa de proyecto (Production Graph) ----------
+// Un proyecto agrupa el grafo de producción (mapa de la película) y referencia
+// escenas guardadas por nombre. Es ligero: las escenas 3D se siguen guardando
+// por separado en bd_scenes_v1; el proyecto solo guarda su grafo.
+const PROJKEY = 'bd_projects_v1', ACTIVEPROJKEY = 'bd_active_project';
+function loadProjects() { try { return JSON.parse(localStorage.getItem(PROJKEY) || '{}'); } catch { return {}; } }
+function saveProjectsAll(all) { try { localStorage.setItem(PROJKEY, JSON.stringify(all)); } catch {} }
+let currentProject = null;
+function saveProject() {
+  if (!currentProject) return;
+  const all = loadProjects();
+  currentProject.updatedAt = new Date().toISOString();
+  all[currentProject.name] = { name: currentProject.name, productionGraph: currentProject.productionGraph, updatedAt: currentProject.updatedAt };
+  saveProjectsAll(all);
+}
+function ensureProject() {
+  const all = loadProjects();
+  let name = null;
+  try { name = localStorage.getItem(ACTIVEPROJKEY); } catch {}
+  if (!name || !all[name]) name = Object.keys(all)[0] || 'Mi película';
+  if (all[name]) {
+    currentProject = { name, productionGraph: all[name].productionGraph || emptyGraph() };
+  } else {
+    // primer proyecto: sembrar un Nodo de Escena por cada escena guardada
+    const scenes = savedScenes(), names = Object.keys(scenes);
+    const nodes = names.map((sn, i) => ({
+      id: 'seed_' + i, type: 'sceneNode', title: '',
+      x: 60 + (i % 3) * 300, y: 60 + Math.floor(i / 3) * 240, w: 252,
+      data: { sceneName: sn, description: scenes[sn].description || '', status: '' }, collapsed: false
+    }));
+    currentProject = { name, productionGraph: { nodes, links: [], view: { x: 40, y: 40, z: 1 } } };
+    saveProject();
+  }
+  try { localStorage.setItem(ACTIVEPROJKEY, name); } catch {}
+}
+// preserva la escena actual antes de cambiar de escena (solo si ya está guardada)
+function saveActiveScene() { try { if (sceneName && savedScenes()[sceneName]) saveSceneLocal(sceneName, true); } catch {} }
+// guarda de inmediato SOLO el Scene Graph en el slot de su escena, para que cada
+// escena conserve su propio grafo aunque no se guarde la escena entera ni se cambie
+let _sgTimer = null;
+function persistSceneGraph() {
+  if (!sceneName) return;
+  const all = savedScenes();
+  if (!all[sceneName]) return;   // escena de trabajo aún sin guardar: se guardará al Guardar
+  all[sceneName].nodeGraph = JSON.parse(JSON.stringify(R.nodeGraph || emptyGraph()));
+  try { persistScenes(all); } catch {}
+}
+// ensureProject() se llama en el arranque (LSKEY aún está en TDZ aquí arriba)
+
+// ---------- dos grafos: Scene Graph (escena) y Production Graph (proyecto) ----------
+// El Scene Graph vive en R.nodeGraph y viaja con la escena; el Production Graph
+// vive en el proyecto. El host entrega el grafo según el modo y expone las
+// acciones que cada uno necesita.
 const nodeHost = {
   t, toast,
-  getGraph: () => (R.nodeGraph || (R.nodeGraph = emptyGraph())),
-  onChange: () => {},
+  getGraph: m => m === 'production'
+    ? (currentProject.productionGraph || (currentProject.productionGraph = emptyGraph()))
+    : (R.nodeGraph || (R.nodeGraph = emptyGraph())),
+  onChange: m => {
+    if (m === 'production') saveProject();
+    else { clearTimeout(_sgTimer); _sgTimer = setTimeout(persistSceneGraph, 400); }
+  },
+  graphSubtitle: m => m === 'production' ? (currentProject ? currentProject.name : '') : sceneName,
+  // --- Scene Graph ---
   listCharacters: () => R.characters.map(c => ({ id: c.id, name: c.name, color: c.colorHex })),
   getCharacter: id => { const c = R.characters.find(x => x.id === id); return c ? { id: c.id, name: c.name } : null; },
   listShots: () => R.shots.map(s => ({ id: s.id, name: s.name, thumb: s.thumb, shotType: s.shotType, fov: s.camState && s.camState.fov })),
   getShot: id => { const s = R.shots.find(x => x.id === id); return s ? { id: s.id, name: s.name, shotType: s.shotType, thumb: s.thumb, fov: s.camState && s.camState.fov } : null; },
   captureViewport: () => { try { renderToCapCanvas(activeCamEnt); return thumbFromCap(0.82); } catch { return ''; } },
-  focusActor: id => { const c = R.characters.find(x => x.id === id); if (c) { nodeGraphUI.close(); setSelected(c); toast(t('{n} seleccionado en la escena', { n: c.name })); } }
+  focusActor: id => { const c = R.characters.find(x => x.id === id); if (c) { nodeGraphUI.close(); setSelected(c); toast(t('{n} seleccionado en la escena', { n: c.name })); } },
+  // --- Production Graph ---
+  listScenes: () => Object.entries(savedScenes()).map(([name, d]) => ({ name, thumb: d.thumb, active: name === sceneName })),
+  loadScene: name => {
+    const all = savedScenes();
+    if (!all[name]) { toast('La escena vinculada ya no existe'); return; }
+    if (name === sceneName) { nodeGraphUI.close(); toast(t('Ya estás en la escena "{n}"', { n: name })); return; }
+    saveActiveScene();                 // conserva el estado de la escena actual
+    nodeGraphUI.close();
+    applySceneData(all[name]);
+    sceneName = name; $('inpSceneName').value = name;
+    toast(t('Escena "{n}" cargada', { n: name }));
+  }
 };
 const nodeGraphUI = initNodeGraph(nodeHost);
-$('btnNodeGraph').onclick = () => { $('ngSceneName').textContent = sceneName; nodeGraphUI.open(); };
+$('btnNodeGraph').onclick = () => nodeGraphUI.open('scene');
+$('btnProductionGraph').onclick = () => { if (!currentProject) ensureProject(); nodeGraphUI.open('production'); };
 
 // colapsar tarjetas del panel izquierdo
 document.querySelectorAll('#leftPanel .card .hd').forEach(h => {
@@ -2821,7 +2890,9 @@ $('btnOpen').onclick = () => {
   document.querySelectorAll('#modalBody .item').forEach(row => {
     const n = names[+row.dataset.i];
     row.querySelector('[data-a="load"]').onclick = () => {
-      pushUndo(); applySceneData(all[n], {}); closeModal();
+      saveActiveScene();                          // conserva el Scene Graph de la escena actual
+      const fresh = savedScenes()[n] || all[n];
+      pushUndo(); applySceneData(fresh, {}); closeModal();
       toast(t('Escena "{n}" cargada', { n }));
     };
     row.querySelector('[data-a="dup"]').onclick = () => {
@@ -2866,6 +2937,7 @@ $('btnNew').onclick = () => {
     <div class="mrow"><label>${t('Nombre')}</label><input type="text" id="mNewName" value="${t('Escena')}_${String(Object.keys(savedScenes()).length + 1).padStart(3, '0')}"></div>
     <div class="mrow"><button class="btn primary w100" id="mNewOk">${t('Crear escena vacia')}</button></div>`);
   $('mNewOk').onclick = () => {
+    saveActiveScene();
     pushUndo();
     applySceneData({
       app: 'BlockoutDirector', sceneName: $('mNewName').value.trim() || t('Escena'), description: '',
@@ -3032,6 +3104,7 @@ $('lcContinue').onclick = closeLauncher;
 $('lcNew').onclick = () => $('btnNew').onclick();
 $('lcImport').onclick = () => $('fileImport').click();
 $('lcSample').onclick = () => {
+  saveActiveScene();
   pushUndo();
   clearScene({});
   buildSampleScene();
@@ -3058,8 +3131,8 @@ function refreshLanguage() {
   renderCharList(); renderPropList(); renderPersp(); renderShots(); renderCaps();
   refreshPipSelect(); refreshKfs();
   renderInspector();
-  $('nodeGraphHint').textContent = t('Planifica escena, tomas, personajes y referencias como un grafo visual.');
-  if (nodeGraphUI.isOpen()) { $('ngSceneName').textContent = sceneName; nodeGraphUI.refresh(); }
+  $('nodeGraphHint').textContent = t('Desglose de esta escena. El Production Graph (barra superior) es el mapa de la película.');
+  if (nodeGraphUI.isOpen()) nodeGraphUI.refresh();
   if (!$('launcher').classList.contains('hidden')) renderLauncher();
 }
 function toggleLang() { setLang(getLang() === 'es' ? 'en' : 'es'); refreshLanguage(); }
@@ -3080,6 +3153,7 @@ await tryLoadDefaultChar();
 await loadCameraModel();
 buildSampleScene();
 postLoadRefresh();
+ensureProject();
 refreshLanguage();
 setInterval(() => { try { saveSceneLocal(AUTOSAVE_KEY, true); } catch {} }, 90000);
 animate();

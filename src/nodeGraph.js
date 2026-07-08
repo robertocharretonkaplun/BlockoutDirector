@@ -1,10 +1,12 @@
 /* ============================================================
-   nodeGraph - Editor de Nodos Avanzado para dirección
-   cinematográfica. Canvas con zoom/pan, nodos de escena, toma,
-   personaje, referencia visual, video y nota; enlaces libres
-   entre nodos; edición inline de propiedades; integración con
-   los actores, tomas y capturas del editor. El grafo se guarda
-   dentro de la escena (host.getGraph()).
+   nodeGraph - Editor de Nodos para dirección cinematográfica.
+   Un mismo motor sirve a dos grafos según el modo:
+   - "production": Production Graph, a nivel de proyecto. Sus
+     Nodos de Escena vinculan y cargan un mundo 3D guardado.
+   - "scene": Scene Graph, interno de una escena. Sus nodos de
+     toma/personaje/referencia desglosan esa escena.
+   Canvas con zoom/pan, enlaces libres, edición inline; el grafo
+   activo lo entrega host.getGraph(mode).
    ============================================================ */
 
 const STATUS = ['Borrador', 'En desarrollo', 'Aprobada', 'Finalizada'];
@@ -12,6 +14,18 @@ const REF_CATS = ['Iluminación', 'Composición', 'Color', 'Vestuario', 'Locaci�
 
 // esquema de cada tipo de nodo (color, icono y campos editables)
 const NODE_TYPES = {
+  // Production Graph: representa una escena de la producción y la carga en 3D
+  sceneNode: {
+    label: 'Nodo de Escena', icon: 'ph-film-slate', color: '#2f7d57', w: 252,
+    fields: [
+      { k: 'sceneName', t: 'Escena vinculada', ui: 'sceneBind' },
+      { k: 'status', t: 'Estado', ui: 'select', opts: STATUS },
+      { k: 'description', t: 'Descripción general', ui: 'textarea' },
+      { k: 'narrative', t: 'Intención narrativa', ui: 'textarea' },
+      { k: 'notes', t: 'Notas de dirección', ui: 'textarea' }
+    ]
+  },
+  // tipo heredado (grafos anteriores a la separación producción/escena)
   scene: {
     label: 'Nodo de Escena', icon: 'ph-film-strip', color: '#2f7d57', w: 240,
     fields: [
@@ -73,13 +87,18 @@ const NODE_TYPES = {
     ]
   }
 };
-const TYPE_ORDER = ['scene', 'shot', 'character', 'imageRef', 'videoRef', 'note'];
+// tipos de nodo ofrecidos en el menú según el modo del grafo
+const MODE_TYPES = {
+  production: ['sceneNode', 'imageRef', 'videoRef', 'note'],
+  scene: ['shot', 'character', 'imageRef', 'videoRef', 'note']
+};
 const PORT_Y = 18;   // altura del puerto respecto al borde superior del nodo
 
 export function initNodeGraph(host) {
   const t = host.t;
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  let G = null;                         // grafo activo (referencia a host.getGraph())
+  let G = null;                         // grafo activo (referencia a host.getGraph(mode))
+  let mode = 'scene';                   // 'scene' | 'production'
   let uidN = 1;
   const nid = () => 'n_' + Date.now().toString(36) + (uidN++).toString(36);
 
@@ -99,8 +118,8 @@ export function initNodeGraph(host) {
     return { x: (cx - r.left - G.view.x) / G.view.z, y: (cy - r.top - G.view.y) / G.view.z };
   }
 
-  // ---------- persistencia ligera ----------
-  const save = () => host.onChange && host.onChange();
+  // ---------- persistencia ligera (por grafo) ----------
+  const save = () => host.onChange && host.onChange(mode);
 
   // ---------- construir un nodo ----------
   function nodeById(id) { return G.nodes.find(n => n.id === id); }
@@ -134,6 +153,18 @@ export function initNodeGraph(host) {
       const opts = `<option value="" ${val ? '' : 'selected'}>${esc(t('— sin vincular —'))}</option>` + orphan +
         list.map(s => `<option value="${esc(s.id)}" ${s.id === val ? 'selected' : ''}>${esc(s.name)}</option>`).join('');
       return lbl + `<select data-k="${f.k}" data-shot>${opts}</select>`;
+    }
+    if (f.ui === 'sceneBind') {
+      // vincula el nodo a una escena guardada del proyecto y permite cargarla
+      const list = host.listScenes ? host.listScenes() : [];
+      const cur = list.find(s => s.name === val);
+      const orphan = val && !cur ? `<option value="${esc(val)}" selected>${esc(val)}</option>` : '';
+      const opts = `<option value="" ${val ? '' : 'selected'}>${esc(t('— sin vincular —'))}</option>` + orphan +
+        list.map(s => `<option value="${esc(s.name)}" ${s.name === val ? 'selected' : ''}>${esc(s.name)}${s.active ? ' ✓' : ''}</option>`).join('');
+      const thumb = cur && cur.thumb ? `<img class="ng-thumb" src="${cur.thumb}" alt="">` : `<div class="ng-thumb ng-thumb-empty"><i class="ph ph-film-slate"></i></div>`;
+      const active = cur && cur.active;
+      return lbl + `<select data-k="${f.k}" data-scenebind>${opts}</select>` + (val ? thumb : '') +
+        (val ? `<button class="ng-linkbtn ng-openscene${active ? ' on' : ''}" data-openscene="${esc(val)}"><i class="ph ph-sign-in"></i> ${esc(active ? t('Escena activa') : t('Abrir escena'))}</button>` : '');
     }
     if (f.ui === 'image') {
       const img = val ? `<img class="ng-thumb" src="${val}" alt="">` : `<div class="ng-thumb ng-thumb-empty"><i class="ph ph-image"></i></div>`;
@@ -229,10 +260,12 @@ export function initNodeGraph(host) {
         n.data[k] = inp.value;
         if (inp.dataset.shot !== undefined) applyShotLink(n, inp.value);
         if (inp.dataset.actor !== undefined) { renderNode(n); }
+        if (inp.dataset.scenebind !== undefined) { if (inp.value && !n.title) n.title = inp.value; renderNode(n); }
         save();
       });
     });
     el.querySelectorAll('[data-focus]').forEach(b => b.onclick = () => host.focusActor(b.dataset.focus));
+    el.querySelectorAll('[data-openscene]').forEach(b => b.onclick = () => host.loadScene && host.loadScene(b.dataset.openscene));
     el.querySelectorAll('[data-upload]').forEach(b => b.onclick = () => pickImage(n, b.dataset.upload));
     el.querySelectorAll('[data-capture]').forEach(b => b.onclick = () => { n.data[b.dataset.capture] = host.captureViewport(); renderNode(n); save(); });
     el.querySelectorAll('[data-uploadvid]').forEach(b => b.onclick = () => pickVideo(n, b.dataset.uploadvid));
@@ -397,7 +430,7 @@ export function initNodeGraph(host) {
   // ya conectado a ese puerto (arrastrar desde un pin y soltar en vacío)
   function showMenu(clientX, clientY, opts = {}) {
     const pending = opts.pending || null;
-    menu.innerHTML = TYPE_ORDER.map(tp =>
+    menu.innerHTML = (MODE_TYPES[mode] || MODE_TYPES.scene).map(tp =>
       `<button data-type="${tp}"><i class="ph ${NODE_TYPES[tp].icon}" style="color:${NODE_TYPES[tp].color}"></i> ${esc(t(NODE_TYPES[tp].label))}</button>`).join('');
     const r = canvas.getBoundingClientRect();
     menu.style.left = Math.min(clientX - r.left, r.width - 210) + 'px';
@@ -487,23 +520,30 @@ export function initNodeGraph(host) {
   $('ngFit').onclick = fitView;
   $('ngClose').onclick = close;
 
+  // ---------- cabecera ----------
+  function updateHeader() {
+    $('ngGraphTitle').textContent = mode === 'production' ? t('Production Graph') : t('Scene Graph');
+    $('ngSceneName').textContent = host.graphSubtitle ? host.graphSubtitle(mode) : '';
+    $('ngHint').textContent = mode === 'production'
+      ? t('Clic derecho: añadir escena · un Nodo de Escena carga su mundo 3D · rueda: zoom')
+      : t('Clic derecho: añadir nodo · arrastra desde un puerto para conectar · rueda: zoom');
+    overlay.dataset.mode = mode;
+  }
+
   // ---------- API pública ----------
-  function open() {
-    G = host.getGraph();
+  function open(m) {
+    mode = m === 'production' ? 'production' : 'scene';
+    G = host.getGraph(mode);
     if (!G.view) G.view = { x: 40, y: 40, z: 1 };
-    // ids futuros por encima de los existentes
     overlay.classList.remove('hidden');
     renderAll();
     if (!G.nodes.length) fitView();
-    updateHint();
+    updateHeader();
     overlay.tabIndex = -1; overlay.focus();
   }
-  function close() { hideMenu(); overlay.classList.add('hidden'); host.onChange && host.onChange(); }
+  function close() { hideMenu(); overlay.classList.add('hidden'); host.onChange && host.onChange(mode); }
   function isOpen() { return !overlay.classList.contains('hidden'); }
-  function refresh() { if (isOpen()) { G = host.getGraph(); if (!G.view) G.view = { x: 40, y: 40, z: 1 }; renderAll(); } }
-  function updateHint() {
-    $('ngHint').textContent = t('Clic derecho: añadir nodo · arrastra desde un puerto para conectar · rueda: zoom');
-  }
+  function refresh() { if (isOpen()) { G = host.getGraph(mode); if (!G.view) G.view = { x: 40, y: 40, z: 1 }; renderAll(); updateHeader(); } }
 
   return { open, close, isOpen, refresh };
 }

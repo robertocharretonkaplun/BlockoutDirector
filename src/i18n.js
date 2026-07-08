@@ -108,6 +108,16 @@ const DICT = {
   '{n} seleccionado en la escena': '{n} selected in the scene',
   'El video supera 24 MB: puede que no se guarde en el navegador (usa Exportar).': 'The video exceeds 24 MB: it may not be saved in the browser (use Export).',
 
+  // --- dos grafos: Production Graph / Scene Graph ---
+  'Escena vinculada': 'Linked scene',
+  'Abrir escena': 'Open scene',
+  'Escena activa': 'Active scene',
+  'Escena "{n}" cargada': 'Scene "{n}" loaded',
+  'Ya estás en la escena "{n}"': 'You are already in scene "{n}"',
+  'La escena vinculada ya no existe': 'The linked scene no longer exists',
+  'Desglose de esta escena. El Production Graph (barra superior) es el mapa de la película.': 'Breakdown of this scene. The Production Graph (top bar) is the film map.',
+  'Clic derecho: añadir escena · un Nodo de Escena carga su mundo 3D · rueda: zoom': 'Right-click: add scene · a Scene Node loads its 3D world · wheel: zoom',
+
   // --- panel de escena / entorno ---
   'Outliner': 'Outliner',
   'World Settings': 'World Settings',

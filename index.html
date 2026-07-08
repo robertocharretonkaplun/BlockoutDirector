@@ -6,7 +6,7 @@
 <title>Blockout Director - Consola de dirección 3D</title>
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 <!-- ?v= evita que GitHub Pages/el navegador mezclen versiones cacheadas al publicar -->
-<link rel="stylesheet" href="./styles.css?v=0.14.0">
+<link rel="stylesheet" href="./styles.css?v=0.15.1">
 <script type="importmap">
 {
   "imports": {
@@ -30,7 +30,7 @@
 </div>
 
 <div id="topbar">
-  <div class="tb brand"><img class="brand-logo" src="./Slate/LogoAO.png" alt="Logo AO"><i class="ph ph-film-slate"></i><span class="brand-txt"><span class="brand-title">Blockout Director</span><span class="brand-ver">v0.14.0</span></span></div>
+  <div class="tb brand"><img class="brand-logo" src="./Slate/LogoAO.png" alt="Logo AO"><i class="ph ph-film-slate"></i><span class="brand-txt"><span class="brand-title">Blockout Director</span><span class="brand-ver">v0.15.1</span></span></div>
   <div class="tb history-menu">
     <button class="btn" id="btnUndo" data-i18n-title title="Deshacer (Ctrl+Z)"><i class="ph ph-arrow-counter-clockwise"></i></button>
     <button class="btn" id="btnRedo" data-i18n-title title="Rehacer (Ctrl+Y)"><i class="ph ph-arrow-clockwise"></i></button>
@@ -44,6 +44,9 @@
     <button class="btn primary" id="btnCapture" data-i18n data-i18n-title title="Capturar fotograma de la vista actual"><i class="ph ph-camera"></i> Capturar</button>
     <button class="btn" id="btnShot" data-i18n><i class="ph ph-film-slate"></i> Guardar toma</button>
     <button class="btn" id="btnTimeline" data-i18n><i class="ph ph-path"></i> Trayectoria</button>
+  </div>
+  <div class="tb graph-menu">
+    <button class="btn" id="btnProductionGraph" data-i18n-title title="Production Graph: mapa de la producción y sus escenas"><i class="ph ph-graph"></i><span class="btn-label" data-i18n>Production</span></button>
   </div>
   <div class="tb file-menu">
     <button class="btn" id="btnProjects" data-i18n-title title="Proyectos guardados"><i class="ph ph-squares-four"></i><span class="btn-label" data-i18n>Proyectos</span></button>
@@ -116,7 +119,7 @@
         <textarea id="inpSceneDesc" rows="3" data-i18n-ph placeholder="Descripción de la escena (se usa en los prompts generados)"></textarea>
         <div class="world-subsection">
           <div class="lbl" data-i18n>Dirección cinematográfica</div>
-          <button class="btn outline w100" id="btnNodeGraph" data-i18n data-i18n-title title="Planifica escenas, tomas, personajes y referencias con nodos"><i class="ph ph-graph"></i> Editor de nodos</button>
+          <button class="btn outline w100" id="btnNodeGraph" data-i18n data-i18n-title title="Scene Graph: tomas, personajes y referencias de esta escena"><i class="ph ph-graph"></i> Scene Graph</button>
           <div class="hint" id="nodeGraphHint"></div>
         </div>
       </div>
@@ -252,7 +255,7 @@
 
 <div id="nodeGraphOverlay" class="hidden">
   <div class="ng-topbar">
-    <span class="ng-title"><i class="ph ph-graph"></i> <span data-i18n>Editor de nodos</span></span>
+    <span class="ng-title"><i class="ph ph-graph"></i> <span id="ngGraphTitle">Scene Graph</span></span>
     <span class="ng-sub" id="ngSceneName"></span>
     <button class="btn outline" id="ngAdd"><i class="ph ph-plus"></i> <span data-i18n>Añadir nodo</span></button>
     <button class="btn outline" id="ngFit" data-i18n-title title="Ajustar a la vista"><i class="ph ph-crop"></i></button>
@@ -288,6 +291,6 @@
 <input type="file" id="fileGlb" accept=".glb" hidden>
 <input type="file" id="fileImport" accept=".json,application/json" hidden>
 
-<script type="module" src="./src/app.js?v=0.14.0"></script>
+<script type="module" src="./src/app.js?v=0.15.1"></script>
 </body>
 </html>

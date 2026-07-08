@@ -7,6 +7,38 @@ y el proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
 
 ---
 
+## [0.15.1] - 2026-07-08
+
+### Corregido
+- **El Scene Graph es único por escena y no se pierde**: las ediciones del
+  Scene Graph se guardan de inmediato en el slot de su propia escena (antes
+  solo se conservaban al guardar la escena entera, y podían perderse al
+  cambiar de escena). Todos los caminos de cambio de escena (Abrir, Nueva,
+  escena de ejemplo, «Abrir escena» de un Nodo de Escena) preservan primero
+  la escena actual. Verificado: dos escenas mantienen grafos distintos que
+  sobreviven al cambio de escena y a recargar la página.
+
+## [0.15.0] - 2026-07-08
+
+### Añadido
+- **Dos grafos con propósitos distintos**, al estilo Level Blueprint vs.
+  lógica de proyecto de Unreal:
+  - **Production Graph** (nivel proyecto, botón en la barra superior): el mapa
+    de la producción. Sus **Nodos de Escena** se vinculan a una escena
+    guardada, muestran su miniatura y estado, y con **«Abrir escena»** cargan
+    ese mundo 3D (guardando antes la escena actual). Se guarda en el proyecto
+    (`bd_projects_v1`), independiente de las escenas.
+  - **Scene Graph** (nivel escena, botón en World Settings): el desglose
+    interno de una escena — tomas, personajes, referencias. Vive dentro de la
+    escena y viaja con ella. Ya no ofrece el tipo «Escena».
+- **Capa de proyecto ligera**: un proyecto agrupa el Production Graph y
+  referencia escenas guardadas por nombre; las escenas 3D se siguen guardando
+  por separado (sin llenar el almacenamiento). Migración automática: al
+  arrancar se crea un proyecto inicial sembrado con un Nodo de Escena por cada
+  escena ya guardada.
+- La cabecera del editor muestra qué grafo está abierto (Production/Scene) y
+  su contexto (proyecto o escena).
+
 ## [0.14.0] - 2026-07-08
 
 ### Añadido (editor de nodos)
