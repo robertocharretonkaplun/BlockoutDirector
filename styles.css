@@ -49,11 +49,12 @@
   --drawer-w:280px;
   --panel-w-r:352px;
   --dock-l:var(--rail-w);
-  --dock-r:var(--panel-w-r);
-  --tb-h:40px;
+  --dock-r:var(--rail-w);
+  --tb-h:48px;
   --tl-h:0px;
 }
 body.drawer-open{--dock-l:calc(var(--rail-w) + var(--drawer-w))}
+body.drawer-r-open{--dock-r:calc(var(--rail-w) + var(--panel-w-r))}
 
 *{box-sizing:border-box}
 html,body{
@@ -106,7 +107,7 @@ canvas#c{width:100%;height:100%;display:block;touch-action:none}
   top:0;
   left:0;
   right:0;
-  min-height:40px;
+  min-height:48px;
   display:flex;
   align-items:center;
   gap:4px;
@@ -131,24 +132,38 @@ canvas#c{width:100%;height:100%;display:block;touch-action:none}
 }
 #topbar .tb:last-child{border-right:0}
 #topbar .brand{
-  gap:8px;
+  gap:9px;
   padding:0 12px 0 4px;
   font-weight:600;
   letter-spacing:0;
 }
 #topbar .brand-logo{
-  width:22px;
-  height:22px;
-  border-radius:4px;
+  width:28px;
+  height:28px;
+  border-radius:5px;
   object-fit:cover;
-  flex:0 0 22px;
+  flex:0 0 28px;
 }
-#topbar .brand .ph{color:var(--accent)}
+#topbar .brand-txt{
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  gap:1px;
+  min-width:0;
+  line-height:1.1;
+}
 #topbar .brand-title{
   min-width:0;
   overflow:hidden;
   text-overflow:ellipsis;
   white-space:nowrap;
+}
+#topbar .brand-ver{
+  font-size:9.5px;
+  font-weight:500;
+  color:var(--muted-2);
+  font-family:var(--font-mono);
+  letter-spacing:.02em;
 }
 #topbar .file-menu{margin-left:auto;border-left:1px solid var(--line-soft)}
 #topbar .shot-menu .btn,
@@ -188,10 +203,10 @@ button:focus-visible,.chip:focus-visible,.item:focus-visible,.rail-tab:focus-vis
   outline-offset:2px;
 }
 
-/* ---------- rail vertical de pestañas (estilo UE) ---------- */
-#leftRail{
+/* ---------- rails verticales de pestañas (estilo UE) ---------- */
+#leftRail,
+#rightRail{
   position:fixed;
-  left:0;
   top:var(--tb-h);
   bottom:var(--tl-h);
   width:var(--rail-w);
@@ -201,9 +216,10 @@ button:focus-visible,.chip:focus-visible,.item:focus-visible,.rail-tab:focus-vis
   gap:2px;
   padding:6px 0;
   background:var(--top);
-  border-right:1px solid var(--line);
   overflow:hidden;
 }
+#leftRail{left:0;border-right:1px solid var(--line)}
+#rightRail{right:0;border-left:1px solid var(--line)}
 .rail-tab{
   display:flex;
   flex-direction:column;
@@ -211,7 +227,6 @@ button:focus-visible,.chip:focus-visible,.item:focus-visible,.rail-tab:focus-vis
   gap:8px;
   padding:10px 0 12px;
   border:0;
-  border-left:2px solid transparent;
   background:transparent;
   color:var(--muted);
   cursor:pointer;
@@ -221,6 +236,8 @@ button:focus-visible,.chip:focus-visible,.item:focus-visible,.rail-tab:focus-vis
   letter-spacing:.05em;
   transition:background .14s ease,color .14s ease,border-color .14s ease;
 }
+#leftRail .rail-tab{border-left:2px solid transparent}
+#rightRail .rail-tab{border-right:2px solid transparent}
 .rail-tab .ph{font-size:16px}
 .rail-lbl{
   writing-mode:vertical-rl;
@@ -234,8 +251,9 @@ button:focus-visible,.chip:focus-visible,.item:focus-visible,.rail-tab:focus-vis
 .rail-tab.active{
   color:var(--ink);
   background:var(--panel);
-  border-left-color:var(--accent);
 }
+#leftRail .rail-tab.active{border-left-color:var(--accent)}
+#rightRail .rail-tab.active{border-right-color:var(--accent)}
 
 /* ---------- drawer izquierdo desplegable ---------- */
 #leftPanel{
@@ -252,7 +270,8 @@ button:focus-visible,.chip:focus-visible,.item:focus-visible,.rail-tab:focus-vis
   overflow:hidden;
 }
 body.drawer-open #leftPanel{display:flex}
-#drawerHead{
+#drawerHead,
+#drawerHeadR{
   flex:0 0 auto;
   display:flex;
   align-items:center;
@@ -268,8 +287,12 @@ body.drawer-open #leftPanel{display:flex}
 body[data-drawer="place"] .drawer-title[data-tab="place"],
 body[data-drawer="world"] .drawer-title[data-tab="world"],
 body[data-drawer="env"] .drawer-title[data-tab="env"],
-body[data-drawer="shots"] .drawer-title[data-tab="shots"]{display:block}
-#drawerClose{
+body[data-drawer="shots"] .drawer-title[data-tab="shots"],
+body[data-drawer-r="outliner"] .drawer-title[data-tab="outliner"],
+body[data-drawer-r="details"] .drawer-title[data-tab="details"],
+body[data-drawer-r="preview"] .drawer-title[data-tab="preview"]{display:block}
+#drawerClose,
+#drawerCloseR{
   margin-left:auto;
   border:0;
   background:transparent;
@@ -280,7 +303,8 @@ body[data-drawer="shots"] .drawer-title[data-tab="shots"]{display:block}
   border-radius:var(--r-ctrl);
   font:inherit;
 }
-#drawerClose:hover{background:var(--panel-3);color:var(--ink)}
+#drawerClose:hover,
+#drawerCloseR:hover{background:var(--panel-3);color:var(--ink)}
 #drawerBody{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden}
 #drawerBody>.card{display:none}
 body[data-drawer="place"] #drawerBody>.card[data-tab="place"],
@@ -317,7 +341,7 @@ body[data-drawer="shots"] #drawerBody>.card[data-tab="shots"]{display:block}
 .card .bd{padding:0 10px 12px}
 
 #drawerBody .card,
-#dockRight>.card,
+#drawerBodyR>.card,
 #rightPanel{
   flex-shrink:0;
   background:transparent;
@@ -326,46 +350,53 @@ body[data-drawer="shots"] #drawerBody>.card[data-tab="shots"]{display:block}
   border-radius:0;
   box-shadow:none;
 }
-#drawerBody .card>.hd,
-#dockRight .card.collap>.hd{cursor:pointer}
+#drawerBody .card>.hd{cursor:pointer}
 #drawerBody .card .hd,
-#dockRight .card .hd,
+#drawerBodyR .card .hd,
 #rightPanel .hd{
   background:var(--panel-head);
   border-bottom:1px solid var(--line-soft);
 }
 #drawerBody .card:not(.closed) .hd,
-#dockRight .card:not(.closed) .hd,
-#rightPanel:not(.hidden) .hd{background:var(--panel-head-open)}
-#drawerBody .card>.hd:hover,
-#dockRight .card.collap>.hd:hover{background:var(--panel-3)}
+#drawerBodyR .card:not(.closed) .hd{background:var(--panel-head-open)}
+#drawerBody .card>.hd:hover{background:var(--panel-3)}
 
-/* ---------- dock derecho: Outliner / Details / Perspectivas / Preview ---------- */
+/* ---------- drawer derecho: Outliner / Details / Preview final ---------- */
 #dockRight{
   position:fixed;
-  right:0;
+  right:var(--rail-w);
   top:var(--tb-h);
   bottom:var(--tl-h);
   width:var(--panel-w-r);
-  z-index:15;
-  display:flex;
+  z-index:16;
+  display:none;
   flex-direction:column;
   background:var(--panel);
   border-left:1px solid var(--line);
-  overflow-x:hidden;
+  overflow:hidden;
+}
+body.drawer-r-open #dockRight{display:flex}
+#drawerBodyR{
+  flex:1;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
   overflow-y:auto;
+  overflow-x:hidden;
   scrollbar-gutter:stable;
 }
-#cardScene .bd{max-height:min(300px,34vh);overflow-y:auto;padding-top:4px}
+#drawerBodyR>.card{display:none}
+body[data-drawer-r="outliner"] #drawerBodyR>.card[data-tab="outliner"],
+body[data-drawer-r="details"] #drawerBodyR>.card[data-tab="details"],
+body[data-drawer-r="preview"] #drawerBodyR>.card[data-tab="preview"]{display:block}
+#cardScene .bd{padding-top:6px}
 #rightPanel{
   flex:0 0 auto;
   min-height:0;
   overflow:visible;
 }
 #pipPanel{
-  margin-top:auto;
   overflow:hidden;
-  border-top:1px solid var(--line);
   border-bottom:0;
 }
 #pipPanel .hd{padding:6px 10px;font-size:11.5px;gap:6px}

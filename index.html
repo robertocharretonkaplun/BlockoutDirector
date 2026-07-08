@@ -6,7 +6,7 @@
 <title>Blockout Director - Consola de dirección 3D</title>
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 <!-- ?v= evita que GitHub Pages/el navegador mezclen versiones cacheadas al publicar -->
-<link rel="stylesheet" href="./styles.css?v=0.11.0">
+<link rel="stylesheet" href="./styles.css?v=0.12.0">
 <script type="importmap">
 {
   "imports": {
@@ -30,7 +30,7 @@
 </div>
 
 <div id="topbar">
-  <div class="tb brand"><img class="brand-logo" src="./Slate/LogoAO.png" alt="Logo AO"><i class="ph ph-film-slate"></i><span class="brand-title">Blockout Director</span></div>
+  <div class="tb brand"><img class="brand-logo" src="./Slate/LogoAO.png" alt="Logo AO"><span class="brand-txt"><span class="brand-title">Blockout Director</span><span class="brand-ver">v0.12.0</span></span></div>
   <div class="tb history-menu">
     <button class="btn" id="btnUndo" data-i18n-title title="Deshacer (Ctrl+Z)"><i class="ph ph-arrow-counter-clockwise"></i></button>
     <button class="btn" id="btnRedo" data-i18n-title title="Rehacer (Ctrl+Y)"><i class="ph ph-arrow-clockwise"></i></button>
@@ -153,32 +153,48 @@
   </div>
 </aside>
 
-<div id="dockRight">
-  <div class="card collap" id="cardScene">
-    <div class="hd" data-i18n><i class="ph ph-list-bullets"></i> Outliner <span class="chev">v</span></div>
-    <div class="bd">
-      <div id="outlinerList" class="outliner-list"></div>
-    </div>
+<!-- Rail derecho: Outliner, Details y Preview final como pestañas verticales -->
+<div id="rightRail">
+  <button class="rail-tab" data-tab="outliner" data-i18n-title title="Outliner"><i class="ph ph-list-bullets"></i><span class="rail-lbl" data-i18n>Outliner</span></button>
+  <button class="rail-tab" data-tab="details" data-i18n-title title="Details"><i class="ph ph-faders"></i><span class="rail-lbl" data-i18n>Details</span></button>
+  <button class="rail-tab" data-tab="preview" data-i18n-title title="Preview final"><i class="ph ph-monitor-play"></i><span class="rail-lbl" data-i18n>Preview final</span></button>
+</div>
+
+<aside id="dockRight">
+  <div id="drawerHeadR">
+    <span class="drawer-title" data-tab="outliner" data-i18n>Outliner</span>
+    <span class="drawer-title" data-tab="details" data-i18n>Details</span>
+    <span class="drawer-title" data-tab="preview" data-i18n>Preview final</span>
+    <button id="drawerCloseR" data-i18n-title title="Ocultar panel"><i class="ph ph-caret-double-right"></i></button>
   </div>
+  <div id="drawerBodyR">
 
-  <aside id="rightPanel" class="card">
-    <div class="hd" id="inspTitle">Details</div>
-    <div class="bd" id="inspector"><div class="inspector-empty" data-i18n>Selecciona un elemento de la escena para ver sus detalles.</div></div>
-  </aside>
-
-  <div id="pipPanel" class="card">
-    <div class="hd"><i class="ph ph-monitor-play"></i> <select id="pipSelect" data-i18n-title title="Cámara del preview final"></select><span class="hint" style="margin:0;flex-shrink:0" data-i18n>Preview final</span></div>
-    <div class="pip-wrap">
-      <canvas id="pip" width="728" height="410"></canvas>
-      <div id="pipGuides" class="hidden">
-        <span class="fg-line v" style="left:33.333%"></span>
-        <span class="fg-line v" style="left:66.666%"></span>
-        <span class="fg-line h" style="top:33.333%"></span>
-        <span class="fg-line h" style="top:66.666%"></span>
+    <div class="card" id="cardScene" data-tab="outliner">
+      <div class="bd">
+        <div id="outlinerList" class="outliner-list"></div>
       </div>
     </div>
+
+    <aside id="rightPanel" class="card" data-tab="details">
+      <div class="hd" id="inspTitle">Details</div>
+      <div class="bd" id="inspector"><div class="inspector-empty" data-i18n>Selecciona un elemento de la escena para ver sus detalles.</div></div>
+    </aside>
+
+    <div id="pipPanel" class="card" data-tab="preview">
+      <div class="hd"><i class="ph ph-monitor-play"></i> <select id="pipSelect" data-i18n-title title="Cámara del preview final"></select></div>
+      <div class="pip-wrap">
+        <canvas id="pip" width="728" height="410"></canvas>
+        <div id="pipGuides" class="hidden">
+          <span class="fg-line v" style="left:33.333%"></span>
+          <span class="fg-line v" style="left:66.666%"></span>
+          <span class="fg-line h" style="top:33.333%"></span>
+          <span class="fg-line h" style="top:66.666%"></span>
+        </div>
+      </div>
+    </div>
+
   </div>
-</div>
+</aside>
 
 <div id="timelinePanel" class="card hidden">
   <div class="hd" data-i18n><i class="ph ph-path"></i> Trayectorias
@@ -252,6 +268,6 @@
 <input type="file" id="fileGlb" accept=".glb" hidden>
 <input type="file" id="fileImport" accept=".json,application/json" hidden>
 
-<script type="module" src="./src/app.js?v=0.11.0"></script>
+<script type="module" src="./src/app.js?v=0.12.0"></script>
 </body>
 </html>

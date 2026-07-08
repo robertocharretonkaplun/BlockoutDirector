@@ -7,6 +7,19 @@ y el proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
 
 ---
 
+## [0.12.0] - 2026-07-07
+
+### Cambiado
+- **Rail derecho de pestañas verticales**: Outliner, Details y Preview final
+  se organizan ahora igual que Colocar actores — una barra vertical en el
+  borde derecho cuyas pestañas despliegan su panel (y se pliegan al volver a
+  pulsarlas o con el botón »). La pestaña activa se recuerda entre sesiones y
+  el viewport gana todo el ancho cuando ambos laterales están plegados.
+- **Cabecera más alta (48 px)** con la **versión de la app** bajo el título
+  de Blockout Director (mantener sincronizada con el `?v=` al publicar).
+
+---
+
 ## [0.11.0] - 2026-07-07
 
 ### Corregido
