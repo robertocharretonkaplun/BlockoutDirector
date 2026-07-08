@@ -3,9 +3,10 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 // los ?v= deben coincidir con el de index.html: invalidan la caché al publicar
-import { createPromptTools } from './promptTools.js?v=0.12.0';
-import { t, getLang, setLang, applyStaticI18n } from './i18n.js?v=0.12.0';
-import { initDockUI } from './dock.js?v=0.12.0';
+import { createPromptTools } from './promptTools.js?v=0.14.0';
+import { t, getLang, setLang, applyStaticI18n } from './i18n.js?v=0.14.0';
+import { initDockUI } from './dock.js?v=0.14.0';
+import { initNodeGraph } from './nodeGraph.js?v=0.14.0';
 
 /* ============================================================
    NUCLEO - utilidades, estado, escena base, selección, render
@@ -29,7 +30,8 @@ function download(name, href){ const a=document.createElement('a'); a.href=href;
 function sanitize(s){ return (s||'x').replace(/[^\wáéíóúñÁÉÍÓÚÑ-]+/g,'_').slice(0,60); }
 
 // ---------- estado global ----------
-const R = { characters: [], props: [], cameras: [], shots: [], captures: [], assets: {} };
+const emptyGraph = () => ({ nodes: [], links: [], view: { x: 40, y: 40, z: 1 } });
+const R = { characters: [], props: [], cameras: [], shots: [], captures: [], assets: {}, nodeGraph: emptyGraph() };
 let sceneName = 'Escena_001', sceneDesc = '';
 let booting = false;
 let selected = null;
@@ -488,6 +490,24 @@ addEventListener('blur', () => { for (const k in fly.keys) fly.keys[k] = false; 
 
 // rail de pestañas verticales + drawer izquierdo (estilo Unreal)
 initDockUI();
+
+// ---------- editor de nodos (dirección cinematográfica) ----------
+// Se abre desde World Settings; el grafo vive en R.nodeGraph y viaja con la
+// escena (guardar/exportar/undo). El host expone los datos y las acciones que
+// el editor necesita del resto de la app (actores, tomas, capturas).
+const nodeHost = {
+  t, toast,
+  getGraph: () => (R.nodeGraph || (R.nodeGraph = emptyGraph())),
+  onChange: () => {},
+  listCharacters: () => R.characters.map(c => ({ id: c.id, name: c.name, color: c.colorHex })),
+  getCharacter: id => { const c = R.characters.find(x => x.id === id); return c ? { id: c.id, name: c.name } : null; },
+  listShots: () => R.shots.map(s => ({ id: s.id, name: s.name, thumb: s.thumb, shotType: s.shotType, fov: s.camState && s.camState.fov })),
+  getShot: id => { const s = R.shots.find(x => x.id === id); return s ? { id: s.id, name: s.name, shotType: s.shotType, thumb: s.thumb, fov: s.camState && s.camState.fov } : null; },
+  captureViewport: () => { try { renderToCapCanvas(activeCamEnt); return thumbFromCap(0.82); } catch { return ''; } },
+  focusActor: id => { const c = R.characters.find(x => x.id === id); if (c) { nodeGraphUI.close(); setSelected(c); toast(t('{n} seleccionado en la escena', { n: c.name })); } }
+};
+const nodeGraphUI = initNodeGraph(nodeHost);
+$('btnNodeGraph').onclick = () => { $('ngSceneName').textContent = sceneName; nodeGraphUI.open(); };
 
 // colapsar tarjetas del panel izquierdo
 document.querySelectorAll('#leftPanel .card .hd').forEach(h => {
@@ -2623,6 +2643,7 @@ function serializeScene(opts = {}) {
       path: JSON.parse(JSON.stringify(c.path))
     })),
     shots: JSON.parse(JSON.stringify(R.shots)),
+    nodeGraph: JSON.parse(JSON.stringify(R.nodeGraph || emptyGraph())),
     captures: opts.captures ? JSON.parse(JSON.stringify(R.captures)) : [],
     assets: opts.assets ? usedAssets() : {}
   };
@@ -2653,6 +2674,7 @@ function clearScene(opts = {}) {
     disposeObject(c.viz);
   }
   R.characters.length = 0; R.props.length = 0; R.cameras.length = 0; R.shots.length = 0;
+  R.nodeGraph = emptyGraph();
   if (!opts.keepCaptures) R.captures.length = 0;
   // los assets (GLB en base64) se conservan siempre: las entidades de escenas
   // cargadas o restauradas por undo los referencian por id
@@ -2701,6 +2723,7 @@ function applySceneData(data, opts = {}) {
     }
     camCounter = R.cameras.length;
     R.shots.push(...(data.shots || []));
+    if (data.nodeGraph && Array.isArray(data.nodeGraph.nodes)) R.nodeGraph = JSON.parse(JSON.stringify(data.nodeGraph));
     if (!opts.keepCaptures && data.captures && data.captures.length) {
       R.captures.push(...data.captures);
       capCounter = R.captures.length;
@@ -2718,6 +2741,7 @@ function applySceneData(data, opts = {}) {
   $('inpSceneName').value = sceneName; $('inpSceneDesc').value = sceneDesc;
   renderCharList(); renderPropList(); renderPersp(); renderShots(); renderCaps();
   refreshPipSelect(); refreshKfs();
+  if (typeof nodeGraphUI !== 'undefined' && nodeGraphUI.isOpen()) nodeGraphUI.refresh();
   if (R.cameras.length && !pipEnt) setPipEnt(R.cameras[0]);
 }
 // ---------- deshacer / rehacer ----------
@@ -3034,6 +3058,8 @@ function refreshLanguage() {
   renderCharList(); renderPropList(); renderPersp(); renderShots(); renderCaps();
   refreshPipSelect(); refreshKfs();
   renderInspector();
+  $('nodeGraphHint').textContent = t('Planifica escena, tomas, personajes y referencias como un grafo visual.');
+  if (nodeGraphUI.isOpen()) { $('ngSceneName').textContent = sceneName; nodeGraphUI.refresh(); }
   if (!$('launcher').classList.contains('hidden')) renderLauncher();
 }
 function toggleLang() { setLang(getLang() === 'es' ? 'en' : 'es'); refreshLanguage(); }

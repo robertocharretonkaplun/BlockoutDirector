@@ -7,6 +7,63 @@ y el proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
 
 ---
 
+## [0.14.0] - 2026-07-08
+
+### Añadido (editor de nodos)
+- **Crear-y-conectar desde un pin** (flujo tipo Unreal): al arrastrar desde un
+  puerto y soltar en un espacio vacío, aparece el menú de tipos de nodo; el
+  nodo elegido se crea junto al cursor y queda **conectado automáticamente** a
+  ese pin (respetando el sentido: desde una salida crea el nodo aguas abajo,
+  desde una entrada lo crea aguas arriba).
+
+### Cambiado (editor de nodos)
+- **La rueda dentro de un nodo hace scroll de su contenido**, no zoom del
+  grafo. El zoom con rueda sigue funcionando sobre el lienzo vacío.
+
+## [0.13.1] - 2026-07-08
+
+### Corregido
+- **El menú de «Añadir nodo» / clic derecho no creaba nodos**: al pulsar una
+  opción, el `pointerdown` burbujeaba al lienzo y ocultaba el menú antes de
+  que el clic la activara. Ahora el lienzo ignora los eventos que nacen dentro
+  del menú, de modo que la opción crea su nodo correctamente.
+
+## [0.13.0] - 2026-07-08
+
+### Añadido
+- **Editor de Nodos Avanzado para dirección cinematográfica** (nuevo módulo
+  `src/nodeGraph.js`), accesible desde **World Settings → Editor de nodos**.
+  Lienzo a pantalla completa con **zoom** hacia el cursor, **paneo**, rejilla
+  de fondo y **menú contextual** (clic derecho) para crear nodos. Seis tipos:
+  - **Nodo de Escena** (descripción, intención narrativa/visual, estado,
+    notas de dirección).
+  - **Nodo de Toma** (vínculo a una toma del proyecto, captura/referencia,
+    número, tipo de plano, ángulo, movimiento, FOV/lente, notas técnicas y de
+    continuidad, estado).
+  - **Nodo de Personaje** (vincula un **actor existente del editor**, con
+    botón «Ver en escena» que lo selecciona en el viewport; imagen, emoción,
+    postura, vestuario y notas de dirección actoral).
+  - **Nodo de Referencia Visual** (subir imagen o **capturar desde el
+    viewport**, categoría y descripción).
+  - **Nodo de Video de Referencia** (subir video con preview reproducible).
+  - **Nodo de Descripción / Nota** (texto libre).
+  - **Conexiones libres** arrastrando entre puertos (entrada/salida), líneas
+    bézier; clic en una línea la elimina. Nodos con **arrastrar**, edición
+    inline de campos, **plegar**, **duplicar**, **renombrar** (título
+    editable) y **eliminar** (botón o tecla Supr).
+- El grafo se **guarda dentro de la escena** (navegador, exportación JSON y
+  undo/redo): nodos, posiciones, tipos, conexiones, textos, imágenes,
+  vínculos a actores/tomas y estado de la vista (zoom/pan).
+
+### Notas
+- Los títulos por defecto de los nodos siguen el idioma activo (ES/EN); al
+  renombrarlos, el nombre propio se conserva.
+- Los videos incrustados grandes (>24 MB) pueden no caber en el
+  almacenamiento del navegador: usa **Exportar** para conservarlos en el
+  archivo del proyecto.
+
+---
+
 ## [0.12.0] - 2026-07-07
 
 ### Cambiado
