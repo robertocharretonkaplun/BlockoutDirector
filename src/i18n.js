@@ -47,6 +47,16 @@ const DICT = {
   'Cámara del preview final': 'Final preview camera',
   'Selecciona un elemento de la escena para ver sus detalles.': 'Select a scene element to see its details.',
 
+  // --- poses y articulaciones ---
+  'Doble clic: volver a 0°': 'Double-click: back to 0°',
+  'Sobrescribir la pose seleccionada con la pose actual': 'Overwrite the selected pose with the current pose',
+  'Borrar la pose seleccionada': 'Delete the selected pose',
+  'Solo se pueden modificar las poses personalizadas': 'Only custom poses can be edited',
+  'Pose "{n}" actualizada': 'Pose "{n}" updated',
+  'Pose "{n}" borrada': 'Pose "{n}" deleted',
+  'Cada keyframe guarda posición, rotación y pose del personaje.': 'Each keyframe stores the character position, rotation and pose.',
+  'clic: ir · arrastrar: mover · clic derecho: eliminar': 'click: go · drag: move · right-click: delete',
+
   // --- panel de escena / entorno ---
   'Outliner': 'Outliner',
   'World Settings': 'World Settings',

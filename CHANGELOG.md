@@ -7,6 +7,44 @@ y el proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
 
 ---
 
+## [0.11.0] - 2026-07-07
+
+### Corregido
+- **Editar la rotación/posición de una cámara mientras se mira a través de
+  ella** ya no se revierte al primer frame: la órbita se reapunta tras cada
+  cambio del panel Details (antes `controls.update()` restauraba la
+  orientación anterior y parecía que "solo aplicaba una vez").
+- **FOV con paso de 0.5°** (antes solo enteros) y **zoom por keyframes
+  fluido**: el helper del frustum ya no se reconstruye en cada frame durante
+  la reproducción (causaba tirones al animar el FOV), solo cuando el cambio
+  supera 1.5°.
+- **Escala por eje (X/Y/Z) en Details**: antes un solo campo global pisaba
+  cualquier escala no uniforme hecha con el gizmo.
+- **Las articulaciones vuelven exactamente a 0°**: cada eje tiene ahora campo
+  numérico junto al deslizador y doble clic en el deslizador restablece a 0
+  (el deslizador solo, por resolución de píxeles, saltaba de -1 a 1).
+
+### Añadido
+- **Poses en keyframes**: los keyframes de personajes con esqueleto guardan la
+  pose completa (articulaciones y cadera) y la reproducción interpola entre
+  ellas → transiciones entre poses y animación de articulaciones sin
+  herramientas extra. La exportación de video también restaura la pose.
+- **Arrastrar keyframes** en las pistas del panel Trayectorias para moverlos
+  en el tiempo (pasos de 0,1 s; clic va al keyframe, clic derecho lo borra).
+- **Gestión de poses personalizadas**: botones para sobrescribir la pose
+  seleccionada con la pose actual y para borrarla (los presets de fábrica
+  quedan protegidos).
+- **Inspector en tiempo real**: posición, rotación, escala y orientación del
+  personaje se actualizan en vivo mientras se mueve la entidad en el viewport
+  (gizmo, vuelo o reproducción).
+
+### Notas
+- El modo de interpolación del timeline ya se aplicaba en caliente por entidad
+  (no hace falta rehacer keyframes): se selecciona la entidad en la pista y se
+  cambia el modo en el selector.
+
+---
+
 ## [0.10.0] - 2026-07-07
 
 ### Añadido

@@ -3,9 +3,9 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 // los ?v= deben coincidir con el de index.html: invalidan la caché al publicar
-import { createPromptTools } from './promptTools.js?v=0.10.0';
-import { t, getLang, setLang, applyStaticI18n } from './i18n.js?v=0.10.0';
-import { initDockUI } from './dock.js?v=0.10.0';
+import { createPromptTools } from './promptTools.js?v=0.11.0';
+import { t, getLang, setLang, applyStaticI18n } from './i18n.js?v=0.11.0';
+import { initDockUI } from './dock.js?v=0.11.0';
 
 /* ============================================================
    NUCLEO - utilidades, estado, escena base, selección, render
@@ -378,6 +378,7 @@ function cleanRender(rndr, cam, w, h) {
 
 // ---------- bucle principal ----------
 const clock = new THREE.Clock();
+let lastInspSync = 0;
 function animate() {
   requestAnimationFrame(animate);
   const dt = clock.getDelta();
@@ -392,6 +393,11 @@ function animate() {
   } else selRing.visible = false;
 
   updateLabels();
+
+  // el inspector sigue en vivo a la entidad seleccionada (gizmo, vuelo,
+  // reproducción...); el guardado de activeElement evita pisar la escritura
+  const nowMs = performance.now();
+  if (selected && nowMs - lastInspSync > 150) { lastInspSync = nowMs; syncInspectorFromSel(); }
 
   if (viewCam === freeCam) {
     renderer.render(scene, viewCam);
@@ -578,6 +584,14 @@ function applyPose(ent, poseDef, name) {
   if (!poseDef) return;
   if (ent.rig) { applyPoseToRig(ent, poseDef, name); return; }
   if (!ent.joints) return;
+  applyPoseTransient(ent, poseDef);
+  ent.poseName = name || 'Personalizada';
+}
+// aplica una pose sin registrar nombre ni copiar estado: es la vía barata
+// que usa la reproducción de keyframes (se llama en cada frame)
+function applyPoseTransient(ent, poseDef) {
+  if (ent.rig) { applyPoseToRig(ent, poseDef, null, true); return; }
+  if (!ent.joints) return;
   for (const k in ent.joints) ent.joints[k].rotation.set(0, 0, 0);
   ent.joints.hips.position.y = BASE_HIPS + (poseDef.hipsOffset || 0);
   for (const k in (poseDef.j || {})) {
@@ -585,7 +599,16 @@ function applyPose(ent, poseDef, name) {
     const r = poseDef.j[k];
     j.rotation.set(DEG(r[0]), DEG(r[1]), DEG(r[2]));
   }
-  ent.poseName = name || 'Personalizada';
+}
+// mezcla lineal de dos poses (ángulos por eje y offset de cadera)
+function lerpPose(a, b, u) {
+  const out = { j: {}, hipsOffset: (a.hipsOffset || 0) + ((b.hipsOffset || 0) - (a.hipsOffset || 0)) * u };
+  const keys = new Set([...Object.keys(a.j || {}), ...Object.keys(b.j || {})]);
+  for (const k of keys) {
+    const ra = (a.j && a.j[k]) || [0, 0, 0], rb = (b.j && b.j[k]) || [0, 0, 0];
+    out.j[k] = [ra[0] + (rb[0] - ra[0]) * u, ra[1] + (rb[1] - ra[1]) * u, ra[2] + (rb[2] - ra[2]) * u];
+  }
+  return out;
 }
 function applyPoseByName(ent, name) { applyPose(ent, getPose(name), name); }
 function currentPoseOf(ent) {
@@ -600,6 +623,10 @@ function currentPoseOf(ent) {
 }
 function saveCustomPose(name, pose) {
   customPoses[name] = pose;
+  try { localStorage.setItem('bd_poses', JSON.stringify(customPoses)); } catch {}
+}
+function deleteCustomPose(name) {
+  delete customPoses[name];
   try { localStorage.setItem('bd_poses', JSON.stringify(customPoses)); } catch {}
 }
 
@@ -792,7 +819,7 @@ function buildRig(model, wrap) {
 // Aplica una pose (definida en el espacio del personaje) a los huesos del rig.
 // Para cada hueso mapeado: L' = (Ap·Wp)⁻¹ · (Ab·Wb), donde A acumula las
 // rotaciones de la pose en espacio del personaje y W son orientaciones de bind.
-function applyPoseToRig(ent, poseDef, name) {
+function applyPoseToRig(ent, poseDef, name, transient) {
   const rig = ent.rig;
   if (!rig) return;
   const poseJ = poseDef.j || {};
@@ -842,8 +869,12 @@ function applyPoseToRig(ent, poseDef, name) {
   const off = new THREE.Vector3(0, poseDef.hipsOffset || 0, 0)
     .applyQuaternion(rig.hips.wqi).multiplyScalar(rig.hips.invS);
   rig.map.hips.position.copy(rig.hips.bindPos).add(off);
-  ent.curPose = JSON.parse(JSON.stringify({ j: poseDef.j || {}, hipsOffset: poseDef.hipsOffset || 0 }));
-  ent.poseName = name || 'Personalizada';
+  // en modo transitorio (reproducción de keyframes) no se toca el estado:
+  // evita la copia profunda por frame y conserva la pose "editada" del usuario
+  if (!transient) {
+    ent.curPose = JSON.parse(JSON.stringify({ j: poseDef.j || {}, hipsOffset: poseDef.hipsOffset || 0 }));
+    ent.poseName = name || 'Personalizada';
+  }
 }
 
 // tinte de color para modelos GLB. Puede conservar texturas o dejar solo el color.
@@ -1170,16 +1201,33 @@ function transformBlockHTML(ent) {
     <input type="number" step="5" id="tRy" value="${r[1]}">
     <input type="number" step="5" id="tRz" value="${r[2]}">
   </div>
-  ${showScale ? `<div class="lbl">${t('Escala')}</div><input type="number" step="0.05" min="0.05" id="tS" value="${s.x.toFixed(2)}">` : ''}`;
+  ${showScale ? `<div class="lbl">${t('Escala')}</div>
+  <div class="grid3">
+    <input type="number" step="0.05" min="0.05" id="tSx" value="${s.x.toFixed(2)}">
+    <input type="number" step="0.05" min="0.05" id="tSy" value="${s.y.toFixed(2)}">
+    <input type="number" step="0.05" min="0.05" id="tSz" value="${s.z.toFixed(2)}">
+  </div>` : ''}`;
 }
 function bindTransformInputs(ent) {
   const apply = () => {
     pushUndo();
     ent.root.position.set(+$('tPx').value || 0, +$('tPy').value || 0, +$('tPz').value || 0);
     ent.root.rotation.set(DEG(+$('tRx').value || 0), DEG(+$('tRy').value || 0), DEG(+$('tRz').value || 0));
-    if ($('tS')) ent.root.scale.setScalar(Math.max(0.05, +$('tS').value || 1));
+    if ($('tSx')) ent.root.scale.set(
+      Math.max(0.05, +$('tSx').value || 1),
+      Math.max(0.05, +$('tSy').value || 1),
+      Math.max(0.05, +$('tSz').value || 1));
+    // si se está mirando a través de esta cámara, reapuntar la órbita:
+    // controls.update() re-orienta la cámara hacia su target en cada frame
+    // y revertiría la rotación/posición recién editada
+    if (ent.kind === 'camera' && viewCam === ent.cam) {
+      const dir = new THREE.Vector3();
+      ent.cam.getWorldDirection(dir);
+      controls.target.copy(ent.cam.position).add(dir.multiplyScalar(4));
+      controls.update();
+    }
   };
-  ['tPx','tPy','tPz','tRx','tRy','tRz','tS'].forEach(id => { const el = $(id); if (el) el.addEventListener('change', apply); });
+  ['tPx','tPy','tPz','tRx','tRy','tRz','tSx','tSy','tSz'].forEach(id => { const el = $(id); if (el) el.addEventListener('change', apply); });
 }
 function syncInspectorFromSel() {
   if (!selected) return;
@@ -1187,7 +1235,8 @@ function syncInspectorFromSel() {
   const set = (id, v) => { const el = $(id); if (el && document.activeElement !== el) el.value = v; };
   set('tPx', p.x.toFixed(2)); set('tPy', p.y.toFixed(2)); set('tPz', p.z.toFixed(2));
   set('tRx', r[0]); set('tRy', r[1]); set('tRz', r[2]);
-  set('tS', selected.root.scale.x.toFixed(2));
+  const sc = selected.root.scale;
+  set('tSx', sc.x.toFixed(2)); set('tSy', sc.y.toFixed(2)); set('tSz', sc.z.toFixed(2));
   if (selected.kind === 'character') {
     const ft = $('inspFacingTxt');
     if (ft) ft.textContent = characterFacingInfo(selected, viewCam).text;
@@ -1207,12 +1256,16 @@ function poseBlockHTML(ent) {
   return `
   <div class="lbl">${t('Pose')}</div>
   <select id="poseSel">${ent.poseName && !getPose(ent.poseName) ? `<option value="${escapeHtml(ent.poseName)}" selected>${escapeHtml(t(ent.poseName))}</option>` : ''}${opts}</select>
-  <button id="btnSavePose" class="btn outline w100" style="margin-top:6px">${t('Guardar pose actual como preset...')}</button>
+  <div class="row" style="margin-top:6px">
+    <button id="btnSavePose" class="btn outline" style="flex:1;min-width:0">${t('Guardar pose actual como preset...')}</button>
+    <button id="btnPoseOverwrite" class="btn outline" title="${t('Sobrescribir la pose seleccionada con la pose actual')}"><i class="ph ph-floppy-disk"></i></button>
+    <button id="btnPoseDelete" class="btn outline danger" title="${t('Borrar la pose seleccionada')}"><i class="ph ph-trash"></i></button>
+  </div>
   <div class="lbl">${t('Ajuste manual de articulación')}</div>
   <select id="jointSel">${jopts}</select>
-  <div class="row"><label style="width:12px">X</label><input type="range" id="jsX" min="-180" max="180" step="1"><span id="jsXv" class="hint" style="margin:0;width:36px;text-align:right"></span></div>
-  <div class="row"><label style="width:12px">Y</label><input type="range" id="jsY" min="-180" max="180" step="1"><span id="jsYv" class="hint" style="margin:0;width:36px;text-align:right"></span></div>
-  <div class="row"><label style="width:12px">Z</label><input type="range" id="jsZ" min="-180" max="180" step="1"><span id="jsZv" class="hint" style="margin:0;width:36px;text-align:right"></span></div>`;
+  <div class="row"><label style="width:12px">X</label><input type="range" id="jsX" min="-180" max="180" step="1" title="${t('Doble clic: volver a 0°')}"><input type="number" id="jsXn" min="-180" max="180" step="1" style="width:58px;flex:0 0 58px"></div>
+  <div class="row"><label style="width:12px">Y</label><input type="range" id="jsY" min="-180" max="180" step="1" title="${t('Doble clic: volver a 0°')}"><input type="number" id="jsYn" min="-180" max="180" step="1" style="width:58px;flex:0 0 58px"></div>
+  <div class="row"><label style="width:12px">Z</label><input type="range" id="jsZ" min="-180" max="180" step="1" title="${t('Doble clic: volver a 0°')}"><input type="number" id="jsZn" min="-180" max="180" step="1" style="width:58px;flex:0 0 58px"></div>`;
 }
 function bindPoseBlock(ent) {
   const getRot = j => ent.joints
@@ -1229,24 +1282,55 @@ function bindPoseBlock(ent) {
       applyPoseToRig(ent, ent.curPose, 'Personalizada');
     }
   };
+  const rows = [['jsX', 'jsXn', 0], ['jsY', 'jsYn', 1], ['jsZ', 'jsZn', 2]];
   const refreshSliders = () => {
     const r = getRot($('jointSel').value);
-    [['jsX','jsXv',0],['jsY','jsYv',1],['jsZ','jsZv',2]].forEach(([sid, vid, i]) => {
-      $(sid).value = r[i]; $(vid).textContent = r[i] + '°';
-    });
+    rows.forEach(([sid, nid, i]) => { $(sid).value = r[i]; $(nid).value = r[i]; });
   };
+  const markCustom = () => { if (document.activeElement !== $('poseSel')) $('poseSel').selectedIndex = -1; };
   $('poseSel').addEventListener('change', e => {
     pushUndo(); applyPoseByName(ent, e.target.value); refreshSliders();
   });
   $('jointSel').addEventListener('change', refreshSliders);
-  [['jsX','jsXv',0],['jsY','jsYv',1],['jsZ','jsZv',2]].forEach(([sid, vid, i]) => {
+  rows.forEach(([sid, nid, i]) => {
     $(sid).addEventListener('pointerdown', () => pushUndo());
     $(sid).addEventListener('input', e => {
       setRot($('jointSel').value, i, +e.target.value);
-      $(vid).textContent = e.target.value + '°';
-      if (document.activeElement !== $('poseSel')) $('poseSel').selectedIndex = -1;
+      $(nid).value = e.target.value;
+      markCustom();
+    });
+    // doble clic en el deslizador: la articulación vuelve exactamente a 0°
+    $(sid).addEventListener('dblclick', () => {
+      pushUndo();
+      setRot($('jointSel').value, i, 0);
+      $(sid).value = 0; $(nid).value = 0;
+      markCustom();
+    });
+    // el campo numérico permite valores exactos (p. ej. volver a 0)
+    $(nid).addEventListener('change', e => {
+      pushUndo();
+      const v = THREE.MathUtils.clamp(+e.target.value || 0, -180, 180);
+      setRot($('jointSel').value, i, v);
+      $(sid).value = v; $(nid).value = v;
+      markCustom();
     });
   });
+  $('btnPoseOverwrite').onclick = () => {
+    const n = $('poseSel').value;
+    if (!customPoses[n]) { toast('Solo se pueden modificar las poses personalizadas'); return; }
+    saveCustomPose(n, currentPoseOf(ent));
+    ent.poseName = n;
+    toast(t('Pose "{n}" actualizada', { n }));
+  };
+  $('btnPoseDelete').onclick = () => {
+    const n = $('poseSel').value;
+    if (!customPoses[n]) { toast('Solo se pueden modificar las poses personalizadas'); return; }
+    deleteCustomPose(n);
+    // la pose sigue aplicada, pero deja de referirse a un preset que ya no existe
+    for (const c of R.characters) if (c.poseName === n) c.poseName = 'Personalizada';
+    renderInspector();
+    toast(t('Pose "{n}" borrada', { n }));
+  };
   $('btnSavePose').onclick = () => {
     openModal(t('Guardar pose'), `
       <div class="mrow"><label>${t('Nombre del preset')}</label><input type="text" id="mPoseName" value="Pose ${Object.keys(customPoses).length + 1}"></div>
@@ -1319,7 +1403,7 @@ function renderInspector() {
     html += `
     <div class="lbl">${t('Objetivo')} <span class="lbl-val" id="inspMm">≈ ${Math.round(ent.cam.getFocalLength())} mm</span></div>
     <div class="chips" id="lensChips">${LENSES.map(l => `<button class="chip" data-mm="${l}">${l}mm</button>`).join('')}</div>
-    <div class="row"><label>FOV</label><input type="range" id="inspFov" min="5" max="115" step="1" value="${Math.round(ent.cam.fov)}"><span id="inspFovV" class="hint" style="margin:0;width:34px;text-align:right">${Math.round(ent.cam.fov)}°</span></div>
+    <div class="row"><label>FOV</label><input type="range" id="inspFov" min="5" max="115" step="0.5" value="${+ent.cam.fov.toFixed(1)}"><span id="inspFovV" class="hint" style="margin:0;width:38px;text-align:right">${+ent.cam.fov.toFixed(1)}°</span></div>
     <div class="lbl">${t('Encuadre')}</div>
     <div class="chips" id="ratioChips">${Object.keys(RATIOS).map(k => `<button class="chip ${ent.ratio === k ? 'active' : ''}" data-ratio="${k}">${k}</button>`).join('')}</div>
     <label class="ck" style="margin-top:9px"><input type="checkbox" id="inspThirds" ${ent.thirds ? 'checked' : ''}> ${t('Regla de tercios')}</label>
@@ -1414,8 +1498,8 @@ function renderInspector() {
       $('inspMm').textContent = `≈ ${Math.round(mm)} mm`;
       document.querySelectorAll('#lensChips .chip').forEach(ch =>
         ch.classList.toggle('active', Math.abs(+ch.dataset.mm - mm) < Math.max(0.6, +ch.dataset.mm * 0.03)));
-      if (document.activeElement !== $('inspFov')) $('inspFov').value = Math.round(ent.cam.fov);
-      $('inspFovV').textContent = Math.round(ent.cam.fov) + '°';
+      if (document.activeElement !== $('inspFov')) $('inspFov').value = +ent.cam.fov.toFixed(1);
+      $('inspFovV').textContent = +ent.cam.fov.toFixed(1) + '°';
     };
     document.querySelectorAll('#lensChips .chip').forEach(ch => ch.onclick = () => {
       pushUndo();
@@ -1554,6 +1638,7 @@ function updateFrustumViz(ent) {
   if (old) { ent.viz.remove(old); old.geometry.dispose(); old.material.dispose(); }
   ent.viz.add(line);
   ent.frustum = line;
+  ent.frustumFov = ent.cam.fov;
 }
 
 // ---------- modelo 3D de la cámara (Slate/camera.glb, tinte negro sin textura) ----------
@@ -1901,7 +1986,7 @@ function pathDuration(ent) {
 function samplePath(ent, t) {
   const kfs = ent.path.keyframes;
   if (!kfs.length) return null;
-  const stateOf = kf => ({ pos: new THREE.Vector3(...kf.pos), quat: kfQuat(kf), fov: kf.fov ?? 40 });
+  const stateOf = kf => ({ pos: new THREE.Vector3(...kf.pos), quat: kfQuat(kf), fov: kf.fov ?? 40, pose: kf.pose || null });
   if (t <= kfs[0].time) return stateOf(kfs[0]);
   if (t >= kfs[kfs.length - 1].time) return stateOf(kfs[kfs.length - 1]);
   let i = 0;
@@ -1922,7 +2007,9 @@ function samplePath(ent, t) {
   }
   const quat = kfQuat(k0).slerp(kfQuat(k1), ue);
   const fov = (k0.fov ?? 40) + ((k1.fov ?? 40) - (k0.fov ?? 40)) * ue;
-  return { pos, quat, fov };
+  // pose del personaje: se mezcla entre keyframes que la tengan guardada
+  const pose = k0.pose && k1.pose ? lerpPose(k0.pose, k1.pose, ue) : (k0.pose || k1.pose || null);
+  return { pos, quat, fov, pose };
 }
 function applyPathAt(ent, time) {
   const s = samplePath(ent, time);
@@ -1930,12 +2017,16 @@ function applyPathAt(ent, time) {
   if (ent.kind === 'camera') {
     ent.cam.position.copy(s.pos);
     ent.cam.quaternion.copy(s.quat);
-    if (Math.abs(ent.cam.fov - s.fov) > 0.05) {
-      ent.cam.fov = s.fov; ent.cam.updateProjectionMatrix(); updateFrustumViz(ent);
+    if (ent.cam.fov !== s.fov) {
+      ent.cam.fov = s.fov; ent.cam.updateProjectionMatrix();
+      // el helper del frustum solo se regenera a saltos gruesos: reconstruir
+      // su geometría en cada frame durante el zoom provoca tirones
+      if (Math.abs((ent.frustumFov ?? 1e9) - s.fov) > 1.5) updateFrustumViz(ent);
     }
   } else {
     ent.root.position.copy(s.pos);
     ent.root.quaternion.copy(s.quat);
+    if (s.pose && ent.kind === 'character') applyPoseTransient(ent, s.pose);
   }
 }
 // todas las entidades animables (cámaras, personajes y props con ≥2 keyframes)
@@ -2025,14 +2116,45 @@ function refreshTracks() {
         const m = document.createElement('span');
         m.className = 'kfmark' + (e.kind === 'camera' ? '' : ' obj');
         m.style.left = (kf.time / dur * 100) + '%';
-        m.title = `t=${kf.time.toFixed(1)}s · ${t('clic: ir · clic derecho: eliminar')}`;
+        m.title = `t=${kf.time.toFixed(1)}s · ${t('clic: ir · arrastrar: mover · clic derecho: eliminar')}`;
         m.addEventListener('click', ev => {
           ev.stopPropagation();
+          if (m.dataset.dragged) { delete m.dataset.dragged; return; }
           stopPB();
           tlEnt = e;
           PB.t = kf.time; applyAllPaths(kf.time);
           $('tlScrub').value = kf.time; tlTimeLabel();
           refreshKfs();
+        });
+        // arrastrar el keyframe por la pista lo mueve en el tiempo (pasos de 0.1s)
+        m.addEventListener('pointerdown', ev => {
+          if (ev.button !== 0) return;
+          ev.stopPropagation();
+          const startX = ev.clientX;
+          let dragging = false;
+          const move = e2 => {
+            if (!dragging) {
+              if (Math.abs(e2.clientX - startX) < 4) return;
+              dragging = true; m.dataset.dragged = '1';
+              stopPB(); pushUndo();
+            }
+            const r = lane.getBoundingClientRect();
+            const nt = Math.round(THREE.MathUtils.clamp((e2.clientX - r.left) / r.width, 0, 1) * dur * 10) / 10;
+            kf.time = nt;
+            m.style.left = (nt / dur * 100) + '%';
+            m.title = `t=${nt.toFixed(1)}s`;
+          };
+          const up = () => {
+            removeEventListener('pointermove', move);
+            removeEventListener('pointerup', up);
+            if (dragging) {
+              e.path.keyframes.sort((a, b) => a.time - b.time);
+              updatePathViz(e);
+              refreshKfs();
+            }
+          };
+          addEventListener('pointermove', move);
+          addEventListener('pointerup', up);
         });
         m.addEventListener('contextmenu', ev => {
           ev.preventDefault(); ev.stopPropagation();
@@ -2064,7 +2186,9 @@ function refreshKfs() {
   $('tlInterp').value = tlEnt.path.interpolation;
   $('tlKfHint').textContent = tlEnt.kind === 'camera'
     ? t('Cada keyframe guarda posición, rotación y FOV de la cámara.')
-    : t('Cada keyframe guarda posición y rotación del objeto.');
+    : (tlEnt.kind === 'character' && (tlEnt.joints || tlEnt.rig))
+      ? t('Cada keyframe guarda posición, rotación y pose del personaje.')
+      : t('Cada keyframe guarda posición y rotación del objeto.');
   if (!tlEnt.path.keyframes.length)
     el.innerHTML = `<span class="hint" style="margin:0">${t('Sin keyframes: mueve la entidad seleccionada y pulsa + Keyframe aquí.')}</span>`;
   tlEnt.path.keyframes.forEach((kf, idx) => {
@@ -2106,6 +2230,9 @@ $('tlAddKf').onclick = () => {
   const src = tlEnt.kind === 'camera' ? tlEnt.cam : tlEnt.root;
   const kf = { time: tk, pos: v3(src.position), rot: eDeg(src.rotation) };
   if (tlEnt.kind === 'camera') kf.fov = +tlEnt.cam.fov.toFixed(1);
+  // los personajes con esqueleto guardan también su pose: al reproducir se
+  // interpola entre las poses de los keyframes (transiciones y articulaciones)
+  else if (tlEnt.kind === 'character' && (tlEnt.joints || tlEnt.rig)) kf.pose = currentPoseOf(tlEnt);
   const kfs = tlEnt.path.keyframes;
   const existing = kfs.findIndex(k => Math.abs(k.time - tk) < 0.01);
   if (existing >= 0) kfs[existing] = kf; else { kfs.push(kf); kfs.sort((a, b) => a.time - b.time); }
@@ -2179,7 +2306,9 @@ function exportVideo() {
   const saved = [];
   for (const e of new Set([...animEnts(), camEnt])) {
     const o = e.kind === 'camera' ? e.cam : e.root;
-    saved.push({ e, o, pos: o.position.clone(), quat: o.quaternion.clone(), fov: e.kind === 'camera' ? e.cam.fov : null });
+    saved.push({ e, o, pos: o.position.clone(), quat: o.quaternion.clone(),
+      fov: e.kind === 'camera' ? e.cam.fov : null,
+      pose: (e.kind === 'character' && (e.joints || e.rig)) ? currentPoseOf(e) : null });
   }
   const restore = () => {
     for (const s of saved) {
@@ -2187,6 +2316,7 @@ function exportVideo() {
       if (s.fov !== null && Math.abs(s.e.cam.fov - s.fov) > 0.01) {
         s.e.cam.fov = s.fov; s.e.cam.updateProjectionMatrix(); updateFrustumViz(s.e);
       }
+      if (s.pose) applyPoseTransient(s.e, s.pose);
     }
   };
   $('vidOverlay').classList.remove('hidden');
