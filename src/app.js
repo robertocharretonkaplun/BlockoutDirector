@@ -3,10 +3,10 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 // los ?v= deben coincidir con el de index.html: invalidan la caché al publicar
-import { createPromptTools } from './promptTools.js?v=0.16.0';
-import { t, getLang, setLang, applyStaticI18n } from './i18n.js?v=0.16.0';
-import { initDockUI } from './dock.js?v=0.16.0';
-import { initNodeGraph } from './nodeGraph.js?v=0.16.0';
+import { createPromptTools } from './promptTools.js?v=0.16.1';
+import { t, getLang, setLang, applyStaticI18n } from './i18n.js?v=0.16.1';
+import { initDockUI } from './dock.js?v=0.16.1';
+import { initNodeGraph } from './nodeGraph.js?v=0.16.1';
 
 /* ============================================================
    NUCLEO - utilidades, estado, escena base, selección, render
@@ -67,6 +67,8 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 const scene = new THREE.Scene();
 const freeCam = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.1, 1400);
+// orden YXZ: la rotación se lee como yaw (Y), pitch (X) y roll (Z) puros
+freeCam.rotation.order = 'YXZ';
 freeCam.position.set(6.5, 4.2, 8.5);
 let viewCam = freeCam;          // cámara que dibuja el viewport principal
 let activeCamEnt = null;        // entidad cámara activa cuando viewCam !== freeCam
@@ -75,7 +77,8 @@ const freeTargetSaved = new THREE.Vector3(0, 1, 0);
 const controls = new OrbitControls(freeCam, renderer.domElement);
 controls.target.set(0, 1, 0);
 controls.enableDamping = true; controls.dampingFactor = 0.09;
-controls.maxPolarAngle = Math.PI * 0.495;
+// sin tope polar: permite mirar hacia arriba (contrapicados) y en vertical (nadir/cenital)
+controls.maxPolarAngle = Math.PI;
 controls.minDistance = 0.4; controls.maxDistance = 160;
 // Clic derecho = vuelo libre (mirar + WASD, lo gestiona fly más abajo).
 // Clic izquierdo = selección (con Alt orbita); botón central = paneo; rueda = zoom.
@@ -107,10 +110,11 @@ const hemi = new THREE.HemisphereLight(0xcdd3da, 0x55524c, 0.85);
 scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xfff2df, 2.4);
 sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
-sun.shadow.camera.left = -24; sun.shadow.camera.right = 24;
-sun.shadow.camera.top = 24; sun.shadow.camera.bottom = -24;
-sun.shadow.camera.near = 0.5; sun.shadow.camera.far = 120;
+sun.shadow.mapSize.set(4096, 4096);
+// el volumen de sombra cubre toda la cuadrícula (80x80, esquinas a ~57 m del centro)
+sun.shadow.camera.left = -60; sun.shadow.camera.right = 60;
+sun.shadow.camera.top = 60; sun.shadow.camera.bottom = -60;
+sun.shadow.camera.near = 0.5; sun.shadow.camera.far = 180;
 sun.shadow.bias = -0.0004;
 scene.add(sun); scene.add(sun.target);
 
@@ -170,7 +174,8 @@ function applyEnv() {
   sun.intensity = env.sun;
   sun.color.set(env.sunColor);
   const el = DEG(env.sunElev), az = DEG(env.sunAzim);
-  sun.position.set(Math.cos(el) * Math.sin(az) * 30, Math.sin(el) * 30, Math.cos(el) * Math.cos(az) * 30);
+  // a 60 m del centro ningún objeto sobre la cuadrícula queda detrás de la cámara de sombras
+  sun.position.set(Math.cos(el) * Math.sin(az) * 60, Math.sin(el) * 60, Math.cos(el) * Math.cos(az) * 60);
   sun.castShadow = env.shadows;
   floor.material.color.set(FLOORS[env.floor].color);
   grid.visible = env.grid;
@@ -206,7 +211,7 @@ $('chkLabels').addEventListener('change', e => { env.labels = e.target.checked; 
 const fly = {
   armed: false, active: false, pointerId: null,
   startX: 0, startY: 0, speed: 6, boost: false,
-  yaw: 0, pitch: 0,
+  yaw: 0, pitch: 0, roll: 0,
   keys: { w: false, a: false, s: false, d: false, q: false, e: false }
 };
 const FLY_THRESH = 4;                       // px para distinguir clic de arrastre
@@ -225,7 +230,7 @@ function enterFly() {
   fly.active = true;
   controls.enabled = false;
   _flyEuler.setFromQuaternion(viewCam.quaternion, 'YXZ');
-  fly.yaw = _flyEuler.y; fly.pitch = _flyEuler.x;
+  fly.yaw = _flyEuler.y; fly.pitch = _flyEuler.x; fly.roll = _flyEuler.z;
   renderer.domElement.style.cursor = 'none';
   showFlyHud();
 }
@@ -235,7 +240,9 @@ function exitFly() {
   controls.enabled = true;
   viewCam.getWorldDirection(_fwd);
   controls.target.copy(viewCam.position).add(_fwd.multiplyScalar(4));
+  const roll = viewCam.rotation.z;
   controls.update();
+  viewCam.rotation.z = roll;
   renderer.domElement.style.cursor = '';
   $('flyHud').classList.add('hidden');
   for (const k in fly.keys) fly.keys[k] = false;
@@ -286,8 +293,9 @@ renderer.domElement.addEventListener('pointermove', e => {
     enterFly();
   }
   fly.yaw -= (e.movementX || 0) * FLY_SENS;
-  fly.pitch = THREE.MathUtils.clamp(fly.pitch - (e.movementY || 0) * FLY_SENS, -1.53, 1.53);
-  _flyEuler.set(fly.pitch, fly.yaw, 0, 'YXZ');
+  // ±89.9°: permite mirar casi en vertical (picados nadir y contrapicados cenitales)
+  fly.pitch = THREE.MathUtils.clamp(fly.pitch - (e.movementY || 0) * FLY_SENS, -1.5697, 1.5697);
+  _flyEuler.set(fly.pitch, fly.yaw, fly.roll, 'YXZ');
   viewCam.quaternion.setFromEuler(_flyEuler);
   e.preventDefault();
 });
@@ -385,7 +393,13 @@ function animate() {
   requestAnimationFrame(animate);
   const dt = clock.getDelta();
   tickPlayback(dt);
-  if (fly.active) flyTick(dt); else controls.update();
+  if (fly.active) flyTick(dt);
+  else {
+    // OrbitControls reorienta la cámara sin alabeo: se conserva el roll (Dutch angle)
+    const roll = viewCam.rotation.z;
+    controls.update();
+    viewCam.rotation.z = roll;
+  }
 
   if (selected) {
     selRing.visible = true;
@@ -1185,6 +1199,9 @@ function instantiateGlb(assetId, kind, data, select) {
     (kind === 'character' ? R.characters : R.props).push(ent);
     updatePathViz(ent);
     renderCharList(); renderPropList();
+    // los GLB llegan de forma asíncrona: si la escena ya refrescó el timeline sin
+    // ellos, la duración y las pistas se recalculan aquí (evita el scrub fijo en 1 s)
+    refreshKfs();
     if (select) setSelected(ent);
   };
   if (!asset) {
@@ -1326,7 +1343,9 @@ function bindTransformInputs(ent) {
       const dir = new THREE.Vector3();
       ent.cam.getWorldDirection(dir);
       controls.target.copy(ent.cam.position).add(dir.multiplyScalar(4));
+      const roll = ent.cam.rotation.z;
       controls.update();
+      ent.cam.rotation.z = roll;
     }
   };
   ['tPx','tPy','tPz','tRx','tRy','tRz','tSx','tSy','tSz'].forEach(id => { const el = $(id); if (el) el.addEventListener('change', apply); });
@@ -1794,6 +1813,8 @@ function addCamera(opts = {}) {
   if (!opts.noUndo) pushUndo();
   const ratio = RATIOS[opts.ratio] ? opts.ratio : '16:9';
   const cam = new THREE.PerspectiveCamera(opts.fov || 40, RATIOS[ratio], 0.1, 600);
+  // orden YXZ: X = picado/contrapicado, Y = paneo, Z = roll (Dutch angle) puros
+  cam.rotation.order = 'YXZ';
   const id = opts.id || uid('cam');
   const viz = buildCameraViz();
   cam.add(viz);
@@ -1810,7 +1831,9 @@ function addCamera(opts = {}) {
 
   if (opts.pos) cam.position.set(...opts.pos);
   else { cam.position.copy(freeCam.position); cam.quaternion.copy(freeCam.quaternion); }
-  if (opts.rot) cam.rotation.set(DEG(opts.rot[0]), DEG(opts.rot[1]), DEG(opts.rot[2]));
+  // las escenas antiguas guardaban la rotación en orden XYZ; las nuevas en YXZ
+  if (opts.rot) cam.quaternion.setFromEuler(
+    new THREE.Euler(DEG(opts.rot[0]), DEG(opts.rot[1]), DEG(opts.rot[2]), opts.rotOrder || 'XYZ'));
   if (opts.lookAt) cam.lookAt(...opts.lookAt);
 
   tagEnt(cam, id);
@@ -1825,7 +1848,7 @@ function addCamera(opts = {}) {
 function duplicateCamera(ent) {
   const n = addCamera({ noUndo: true, name: ent.name + ' ' + t('copia'), fov: ent.cam.fov, shotType: ent.shotType,
     ratio: ent.ratio, thirds: ent.thirds,
-    pos: v3(ent.cam.position), rot: eDeg(ent.cam.rotation),
+    pos: v3(ent.cam.position), rot: eDeg(ent.cam.rotation), rotOrder: ent.cam.rotation.order,
     path: JSON.parse(JSON.stringify(ent.path)) });
   updatePathViz(n);
   return n;
@@ -1856,7 +1879,9 @@ function setViewCamera(ent) {
     controls.target.copy(freeTargetSaved);
   }
   tc.camera = viewCam;
+  const roll = viewCam.rotation.z;
   controls.update();
+  viewCam.rotation.z = roll;
   renderPersp();
   updateFrameGuides();
 }
@@ -2079,7 +2104,8 @@ function crSpline(t, p0, p1, p2, p3) {
   return (2 * p1 - 2 * p2 + v0 + v1) * t3 + (-3 * p1 + 3 * p2 - 2 * v0 - v1) * t2 + v0 * t + p1;
 }
 function kfQuat(kf) {
-  return new THREE.Quaternion().setFromEuler(new THREE.Euler(DEG(kf.rot[0]), DEG(kf.rot[1]), DEG(kf.rot[2])));
+  // kf.o guarda el orden Euler con el que se capturó (las cámaras usan YXZ)
+  return new THREE.Quaternion().setFromEuler(new THREE.Euler(DEG(kf.rot[0]), DEG(kf.rot[1]), DEG(kf.rot[2]), kf.o || 'XYZ'));
 }
 function pathDuration(ent) {
   const k = ent.path.keyframes;
@@ -2331,6 +2357,7 @@ $('tlAddKf').onclick = () => {
   const tk = Math.max(0, +$('tlKfTime').value || 0);
   const src = tlEnt.kind === 'camera' ? tlEnt.cam : tlEnt.root;
   const kf = { time: tk, pos: v3(src.position), rot: eDeg(src.rotation) };
+  if (src.rotation.order !== 'XYZ') kf.o = src.rotation.order;
   if (tlEnt.kind === 'camera') kf.fov = +tlEnt.cam.fov.toFixed(1);
   // los personajes con esqueleto guardan también su pose: al reproducir se
   // interpola entre las poses de los keyframes (transiciones y articulaciones)
@@ -2601,16 +2628,18 @@ function applyShot(sh) {
   const s = sh.camState;
   if (ent) {
     ent.cam.position.set(...s.pos);
-    ent.cam.rotation.set(DEG(s.rot[0]), DEG(s.rot[1]), DEG(s.rot[2]));
+    ent.cam.quaternion.setFromEuler(new THREE.Euler(DEG(s.rot[0]), DEG(s.rot[1]), DEG(s.rot[2]), s.o || 'XYZ'));
     ent.cam.fov = s.fov; ent.cam.updateProjectionMatrix(); updateFrustumViz(ent);
     setViewCamera(ent); setSelected(ent); setPipEnt(ent);
   } else {
     setViewCamera(null);
     freeCam.position.set(...s.pos);
-    freeCam.rotation.set(DEG(s.rot[0]), DEG(s.rot[1]), DEG(s.rot[2]));
+    freeCam.quaternion.setFromEuler(new THREE.Euler(DEG(s.rot[0]), DEG(s.rot[1]), DEG(s.rot[2]), s.o || 'XYZ'));
     const dir = new THREE.Vector3(); freeCam.getWorldDirection(dir);
     controls.target.copy(freeCam.position).add(dir.multiplyScalar(4));
+    const roll = freeCam.rotation.z;
     controls.update();
+    freeCam.rotation.z = roll;
   }
   toast(t('Toma "{n}" aplicada', { n: sh.name }));
 }
@@ -2681,7 +2710,7 @@ $('btnShot').onclick = () => {
     R.shots.push({
       id: uid('shot'), name: $('mShotName').value.trim() || t('Toma'),
       cameraId: ent ? ent.id : null, cameraName: camDisplayName(ent),
-      camState: { pos: v3(cam.position), rot: eDeg(cam.rotation), fov: +cam.fov.toFixed(1) },
+      camState: { pos: v3(cam.position), rot: eDeg(cam.rotation), o: cam.rotation.order, fov: +cam.fov.toFixed(1) },
       shotType, notes,
       characterStates: shotState.characterStates,
       propStates: shotState.propStates,
@@ -2721,7 +2750,7 @@ function serializeScene(opts = {}) {
     cameras: R.cameras.map(c => ({
       id: c.id, name: c.name, fov: +c.cam.fov.toFixed(1), shotType: c.shotType,
       ratio: c.ratio || '16:9', thirds: c.thirds !== false,
-      position: v3(c.cam.position), rotation: eDeg(c.cam.rotation),
+      position: v3(c.cam.position), rotation: eDeg(c.cam.rotation), rotOrder: c.cam.rotation.order,
       path: JSON.parse(JSON.stringify(c.path))
     })),
     shots: JSON.parse(JSON.stringify(R.shots)),
@@ -2765,6 +2794,8 @@ function clearScene(opts = {}) {
 }
 
 function applySceneData(data, opts = {}) {
+  // cámara activa antes de limpiar: undo/redo la restaura en vez de expulsar a Vista Libre
+  const prevViewId = activeCamEnt ? activeCamEnt.id : null;
   clearScene(opts);
   booting = true;
   try {
@@ -2800,7 +2831,7 @@ function applySceneData(data, opts = {}) {
     }
     for (const c of data.cameras || []) {
       addCamera({ noUndo: true, noSelect: true, id: c.id, name: c.name, fov: c.fov, shotType: c.shotType,
-        ratio: c.ratio, thirds: c.thirds,
+        ratio: c.ratio, thirds: c.thirds, rotOrder: c.rotOrder,
         pos: c.position, rot: c.rotation, path: c.path || { interpolation: 'catmullrom', keyframes: [] } });
     }
     camCounter = R.cameras.length;
@@ -2819,6 +2850,8 @@ function applySceneData(data, opts = {}) {
       controls.update();
     }
   } finally { booting = false; }
+  const prevView = prevViewId ? R.cameras.find(c => c.id === prevViewId) : null;
+  if (prevView) setViewCamera(prevView);
   applyEnv(); syncEnvUI();
   $('inpSceneName').value = sceneName; $('inpSceneDesc').value = sceneDesc;
   renderCharList(); renderPropList(); renderPersp(); renderShots(); renderCaps();

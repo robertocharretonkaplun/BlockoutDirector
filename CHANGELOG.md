@@ -7,6 +7,33 @@ y el proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
 
 ---
 
+## [0.16.1] - 2026-07-10
+
+### Corregido
+- **Roll de cámara (Dutch angle) editable**: el campo Z de «Rotación (°)» ahora
+  inclina la cámara de verdad. Las cámaras (y la Vista Libre) usan orden de
+  ejes YXZ, de modo que X = picado/contrapicado, Y = paneo y Z = roll puros; el
+  control de órbita ya no borra el roll en cada frame (se conserva al navegar,
+  volar y cambiar de vista). Las escenas, tomas y keyframes antiguos se siguen
+  leyendo con su orden original (XYZ), sin cambiar su orientación.
+- **Rotación X positiva permitida (contrapicados y nadir)**: se eliminó el tope
+  polar de la órbita que impedía mirar hacia arriba, y el vuelo libre acepta
+  pitch hasta ±89.9° (antes ±87.6°).
+- **Las sombras cubren toda la cuadrícula**: el volumen de sombra del sol pasó
+  de ±24 m a ±60 m (con mapa de 4096 px y el sol a 60 m), por lo que ya no se
+  cortan antes del borde de la cuadrícula de 80x80 m.
+- **Deshacer/Rehacer ya no expulsa de la vista de cámara**: si estabas mirando
+  por una cámara, tras el undo/redo se restaura esa misma vista en lugar de
+  volver a la Vista Libre.
+- **Ortografía de los prompts generados**: se añadieron los acentos que
+  faltaban (cinematográfico, cámara, iluminación, emoción, dirección, posición,
+  rotación, composición, relación, ángulo, atmosférica), con sus claves de
+  traducción EN sincronizadas.
+- **Timeline ya no queda fijo en 1 s al abrir/importar una escena**: los
+  personajes y props GLB se cargan de forma asíncrona y el panel de
+  Trayectorias se refrescaba antes de que existieran; ahora la duración y las
+  pistas se recalculan al terminar de instanciarse cada GLB.
+
 ## [0.16.0] - 2026-07-08
 
 ### Añadido (Scene Graph)
