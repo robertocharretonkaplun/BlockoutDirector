@@ -13,9 +13,24 @@ export function createPromptTools({
   escapeHtml,
   getViewCam,
   getSceneName,
-  getSceneDesc
+  getSceneDesc,
+  getPromptRules
 }) {
   const RAD = THREE.MathUtils.radToDeg;
+
+  // reglas de exclusión (Director > Ajustes de prompt) + excepciones por objeto
+  const rules = () => (getPromptRules ? getPromptRules() : {});
+  function promptIncludes(ent) {
+    const r = rules();
+    if (ent.promptOverride === 'include') return true;
+    if (ent.promptOverride === 'omit') return false;
+    if (r.omitHidden !== false && (ent.visMode === 'hidden' || ent.visMode === 'viewport')) return false;
+    if (r.omitAux && ent.aux) return false;
+    if (r.omitCopies && /\b(copia|copy)\b/i.test(ent.name || '')) return false;
+    return true;
+  }
+  const baseName = n => String(n || '').toLowerCase()
+    .replace(/\s+(copia|copy)(\s+\d+)?$/i, '').replace(/\s+\d+$/, '').trim();
 
   function activeCam(camEnt) {
     return camEnt ? camEnt.cam : getViewCam();
@@ -36,6 +51,7 @@ export function createPromptTools({
   function visibleCharactersForCam(cam) {
     const frus = frustumForCam(cam);
     return R.characters.filter(c => {
+      if (!promptIncludes(c)) return false;
       const p = c.root.position.clone(); p.y += 1.2 * c.root.scale.y;
       return frus.containsPoint(p) || frus.containsPoint(c.root.position);
     });
@@ -43,7 +59,19 @@ export function createPromptTools({
 
   function visiblePropsForCam(cam) {
     const frus = frustumForCam(cam);
-    return R.props.filter(p => p.type !== 'luz' && frus.containsPoint(p.root.position.clone().setY(p.root.position.y + 0.5)));
+    let out = R.props.filter(p => p.type !== 'luz' && promptIncludes(p) &&
+      frus.containsPoint(p.root.position.clone().setY(p.root.position.y + 0.5)));
+    // regla "omitir duplicados": del mismo tipo y nombre base solo queda el primero
+    if (rules().omitDupes) {
+      const seen = new Set();
+      out = out.filter(p => {
+        const k = p.type + '|' + baseName(p.name);
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
+    }
+    return out;
   }
 
   function fmtNum(n, digits = 2) {

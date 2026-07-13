@@ -3,10 +3,11 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 // los ?v= deben coincidir con el de index.html: invalidan la caché al publicar
-import { createPromptTools } from './promptTools.js?v=0.16.1';
-import { t, getLang, setLang, applyStaticI18n } from './i18n.js?v=0.16.1';
-import { initDockUI } from './dock.js?v=0.16.1';
-import { initNodeGraph } from './nodeGraph.js?v=0.16.1';
+import { createPromptTools } from './promptTools.js?v=0.17.4';
+import { t, getLang, setLang, applyStaticI18n } from './i18n.js?v=0.17.4';
+import { initDockUI } from './dock.js?v=0.17.4';
+import { initNodeGraph } from './nodeGraph.js?v=0.17.4';
+import { initMenuBar } from './menubar.js?v=0.17.4';
 
 /* ============================================================
    NUCLEO - utilidades, estado, escena base, selección, render
@@ -31,7 +32,7 @@ function sanitize(s){ return (s||'x').replace(/[^\wáéíóúñÁÉÍÓÚÑ-]+/g
 
 // ---------- estado global ----------
 const emptyGraph = () => ({ nodes: [], links: [], view: { x: 40, y: 40, z: 1 } });
-const R = { characters: [], props: [], cameras: [], shots: [], captures: [], assets: {}, nodeGraph: emptyGraph() };
+const R = { characters: [], props: [], cameras: [], shots: [], captures: [], assets: {}, collections: [], nodeGraph: emptyGraph() };
 let sceneName = 'Escena_001', sceneDesc = '';
 let booting = false;
 let selected = null;
@@ -53,7 +54,40 @@ const FLOORS = {
   blanco:  { label:'Blanco',   color:'#e2e4e8' }
 };
 const env = { sky:'interior', floor:'madera', grid:true, shadows:true, fog:false, labels:true,
+              // niebla avanzada: modo lineal (near/far) o exponencial (densidad);
+              // fogColor vacío = usar el color inferior del cielo actual
+              fogMode:'linear', fogColor:'', fogNear:18, fogFar:120, fogDensity:0.02,
               sun:2.4, sunColor:'#fff2df', sunElev:52, sunAzim:35, amb:0.85, ambColor:'#cdd3da' };
+
+// ---------- preferencias de la herramienta (localStorage: no viajan con la escena) ----------
+function loadLS(key, fallback) {
+  try { return Object.assign({}, fallback, JSON.parse(localStorage.getItem(key) || '{}')); }
+  catch { return { ...fallback }; }
+}
+const prefs = loadLS('bd_prefs', { cursorWrap: true });
+function savePrefs() { try { localStorage.setItem('bd_prefs', JSON.stringify(prefs)); } catch {} }
+
+// reglas globales de exclusión para el prompt generado (Director > Ajustes de prompt)
+const promptRules = loadLS('bd_prompt_rules', { omitHidden: true, omitCopies: false, omitDupes: false, omitAux: true });
+function savePromptRules() { try { localStorage.setItem('bd_prompt_rules', JSON.stringify(promptRules)); } catch {} }
+
+// atajos configurables (Tools > Atajos de teclado); formato: 'c', 'ctrl+d', 'shift+e'
+const DEFAULT_KEYS = {
+  toggleView: 'c', cycleCamera: 'n', addKeyframe: 'k', playPause: 'p',
+  hideSelected: 'h', duplicate: 'ctrl+d', toggleTimeline: 't', exportPrompt: 'shift+e'
+};
+const KEY_ACTION_LABELS = {
+  toggleView: 'Alternar Vista Libre / Vista de Cámara',
+  cycleCamera: 'Cambiar cámara activa',
+  addKeyframe: 'Crear keyframe en el tiempo actual',
+  playPause: 'Reproducir / pausar trayectorias',
+  hideSelected: 'Ocultar / mostrar la selección',
+  duplicate: 'Duplicar la selección',
+  toggleTimeline: 'Abrir / cerrar Trayectorias',
+  exportPrompt: 'Exportar prompt de la vista'
+};
+const keymap = loadLS('bd_keys', DEFAULT_KEYS);
+function saveKeymap() { try { localStorage.setItem('bd_keys', JSON.stringify(keymap)); } catch {} }
 
 // ---------- three.js base ----------
 const renderer = new THREE.WebGLRenderer({ canvas: $('c'), antialias: true });
@@ -179,7 +213,12 @@ function applyEnv() {
   sun.castShadow = env.shadows;
   floor.material.color.set(FLOORS[env.floor].color);
   grid.visible = env.grid;
-  scene.fog = env.fog ? new THREE.Fog(new THREE.Color(p.bottom), 18, 120) : null;
+  if (env.fog) {
+    const fc = new THREE.Color(env.fogColor || p.bottom);
+    scene.fog = env.fogMode === 'exp'
+      ? new THREE.FogExp2(fc, env.fogDensity)
+      : new THREE.Fog(fc, env.fogNear, env.fogFar);
+  } else scene.fog = null;
 }
 function syncEnvUI() {
   document.querySelectorAll('#skyChips .chip').forEach(c => c.classList.toggle('active', c.dataset.sky === env.sky));
@@ -232,12 +271,18 @@ function enterFly() {
   _flyEuler.setFromQuaternion(viewCam.quaternion, 'YXZ');
   fly.yaw = _flyEuler.y; fly.pitch = _flyEuler.x; fly.roll = _flyEuler.z;
   renderer.domElement.style.cursor = 'none';
+  // Cursor infinito (Tools > Preferencias): Pointer Lock permite girar sin que
+  // el cursor se detenga en el borde de la pantalla
+  if (prefs.cursorWrap && renderer.domElement.requestPointerLock) {
+    try { renderer.domElement.requestPointerLock(); } catch {}
+  }
   showFlyHud();
 }
 function exitFly() {
   if (!fly.active) return;
   fly.active = false;
   controls.enabled = true;
+  if (document.pointerLockElement) { try { document.exitPointerLock(); } catch {} }
   viewCam.getWorldDirection(_fwd);
   controls.target.copy(viewCam.position).add(_fwd.multiplyScalar(4));
   const roll = viewCam.rotation.z;
@@ -331,12 +376,43 @@ function pick(e) {
       o = o.parent;
     }
     if (bad) continue;
+    // las entidades ocultas o bloqueadas no se seleccionan con clic
+    // (las bloqueadas siguen accesibles desde el Outliner)
+    if (ent && (ent.locked || ent.visMode === 'hidden')) continue;
     if (ent) { setSelected(ent); return; }
     if (h.object.userData.isFloor) break;
   }
   setSelected(null);
 }
 function tagEnt(root, id) { root.traverse(o => { o.userData.entId = id; }); }
+
+// ---------- visibilidad por entidad ----------
+// visMode: 'visible' (en todo) · 'viewport' (solo en el editor, fuera de
+// capturas/exportaciones/preview) · 'hidden' (oculto en todo).
+// promptOverride: '' (según reglas) · 'include' · 'omit'. aux: marcado auxiliar.
+const VIS_MODES = [
+  ['visible', 'Visible en escena'],
+  ['viewport', 'Solo viewport (fuera de capturas y exportación)'],
+  ['hidden', 'Oculto']
+];
+function applyVisibility(ent) { ent.root.visible = ent.visMode !== 'hidden'; }
+function setVisMode(ent, mode, noUndo) {
+  if (!noUndo) pushUndo();
+  ent.visMode = mode;
+  applyVisibility(ent);
+  if (selected === ent && mode === 'hidden') setSelected(null);
+  renderOutliner();
+}
+// copia los campos de visibilidad desde opts/datos guardados a la entidad
+function visFromOpts(ent, o = {}) {
+  ent.visMode = VIS_MODES.some(([m]) => m === o.visMode) ? o.visMode : 'visible';
+  ent.aux = !!o.aux;
+  ent.locked = !!o.locked;
+  ent.promptOverride = o.promptOverride === 'include' || o.promptOverride === 'omit' ? o.promptOverride : '';
+}
+function serializeVis(ent) {
+  return { visMode: ent.visMode || 'visible', aux: !!ent.aux, locked: !!ent.locked, promptOverride: ent.promptOverride || '' };
+}
 
 // ---------- etiquetas flotantes ----------
 const labelsEl = $('labels');
@@ -372,7 +448,11 @@ function updateLabels() {
 function collectClutter() {
   const list = [grid, selRing, tc];
   for (const c of R.cameras) { list.push(c.viz); if (c.pathViz) list.push(c.pathViz); }
-  for (const e of [...R.characters, ...R.props]) if (e.pathViz) list.push(e.pathViz);
+  for (const e of [...R.characters, ...R.props]) {
+    if (e.pathViz) list.push(e.pathViz);
+    // "solo viewport": visibles al editar pero fuera de capturas/preview/exportación
+    if (e.visMode === 'viewport') list.push(e.root);
+  }
   for (const p of R.props) if (p.type === 'luz' && p.marker) list.push(p.marker);
   return list;
 }
@@ -481,9 +561,12 @@ addEventListener('keydown', e => {
     if (e.key === 'Shift') { fly.boost = true; return; }
     if (e.key === 'Escape') { exitFly(); return; }
   }
+  // atajos configurables (Tools > Atajos de teclado); los fijos siguen abajo
+  const sig = (e.ctrlKey ? 'ctrl+' : '') + (e.altKey ? 'alt+' : '') + (e.shiftKey ? 'shift+' : '') + k;
+  const act = Object.keys(keymap).find(a => keymap[a] === sig);
+  if (act) { e.preventDefault(); runKeyAction(act); return; }
   if (e.ctrlKey && k === 'z') { e.preventDefault(); doUndo(); }
   else if (e.ctrlKey && k === 'y') { e.preventDefault(); doRedo(); }
-  else if (e.ctrlKey && k === 'd') { e.preventDefault(); if (selected) duplicateEnt(selected); }
   else if (e.key === 'Delete' && selected) deleteEnt(selected);
   else if (k === 'w') setTool('translate');
   else if (k === 'e') setTool('rotate');
@@ -501,6 +584,39 @@ addEventListener('keyup', e => {
 });
 // si la ventana pierde el foco, soltar todas las teclas de vuelo (evita movimiento "pegado")
 addEventListener('blur', () => { for (const k in fly.keys) fly.keys[k] = false; fly.boost = false; });
+
+// acciones de los atajos configurables (Tools > Atajos de teclado)
+function runKeyAction(act) {
+  switch (act) {
+    case 'toggleView': {
+      if (viewCam !== freeCam) { setViewCamera(null); break; }
+      const target = (lastCamView && R.cameras.includes(lastCamView)) ? lastCamView : R.cameras[0];
+      if (target) setViewCamera(target); else toast('Crea una camara primero');
+      break;
+    }
+    case 'cycleCamera': {
+      if (!R.cameras.length) { toast('Crea una camara primero'); break; }
+      const i = activeCamEnt ? R.cameras.indexOf(activeCamEnt) : -1;
+      setViewCamera(R.cameras[(i + 1) % R.cameras.length]);
+      toast(t('Cámara activa: {n}', { n: activeCamEnt.name }));
+      break;
+    }
+    case 'addKeyframe':
+      if ($('timelinePanel').classList.contains('hidden')) openTimeline(selected || null);
+      if (!tlEnt) { toast('Selecciona una entidad en el timeline'); break; }
+      $('tlKfTime').value = PB.t.toFixed(1);
+      $('tlAddKf').click();
+      break;
+    case 'playPause': $('tlPlay').click(); break;
+    case 'hideSelected':
+      if (!selected || selected.kind === 'camera') { toast('Selecciona un personaje o prop'); break; }
+      setVisMode(selected, selected.visMode === 'hidden' ? 'visible' : 'hidden');
+      break;
+    case 'duplicate': if (selected) duplicateEnt(selected); break;
+    case 'toggleTimeline': $('btnTimeline').click(); break;
+    case 'exportPrompt': openExportPromptModal(); break;
+  }
+}
 
 // rail de pestañas verticales + drawer izquierdo (estilo Unreal)
 initDockUI();
@@ -612,8 +728,7 @@ document.querySelectorAll('#leftPanel .card .hd').forEach(h => {
 
 $('inpSceneName').addEventListener('change', e => { sceneName = e.target.value || 'Escena'; });
 $('inpSceneDesc').addEventListener('change', e => { sceneDesc = e.target.value; });
-$('btnUndo').onclick = () => doUndo();
-$('btnRedo').onclick = () => doRedo();
+// deshacer/rehacer viven en el menú Edición (y Ctrl+Z / Ctrl+Y)
 
 /* ============================================================
    MANIQUIES - construcción articulada y sistema de poses
@@ -775,6 +890,7 @@ function addMannequin(opts = {}) {
   tagEnt(root, id);
   scene.add(root);
   R.characters.push(ent);
+  visFromOpts(ent, opts); applyVisibility(ent);
   updatePathViz(ent);
   applyPoseByName(ent, opts.pose || 'De pie');
   renderCharList();
@@ -1124,6 +1240,7 @@ function addProp(type, opts = {}) {
   tagEnt(gr, id);
   scene.add(gr);
   R.props.push(ent);
+  visFromOpts(ent, opts); applyVisibility(ent);
   updatePathViz(ent);
   renderPropList();
   if (!opts.noSelect) setSelected(ent);
@@ -1197,6 +1314,7 @@ function instantiateGlb(assetId, kind, data, select) {
     tagEnt(wrap, id);
     scene.add(wrap);
     (kind === 'character' ? R.characters : R.props).push(ent);
+    visFromOpts(ent, data); applyVisibility(ent);
     updatePathViz(ent);
     renderCharList(); renderPropList();
     // los GLB llegan de forma asíncrona: si la escena ya refrescó el timeline sin
@@ -1259,6 +1377,7 @@ function setSelected(ent) {
 }
 
 // ---------- outliner del panel izquierdo ----------
+let outlinerDrag = null;   // {arr, id} de la entidad arrastrada para reordenar
 function renderOutliner() {
   const el = $('outlinerList');
   if (!el) return;
@@ -1281,14 +1400,51 @@ function renderOutliner() {
 
     for (const ent of arr) {
       const d = document.createElement('div');
-      d.className = 'item outliner-item' + (selected === ent ? ' active' : '');
+      d.className = 'item outliner-item' + (selected === ent ? ' active' : '') +
+        (ent.visMode === 'hidden' ? ' ent-hidden' : '');
       const icon = ent.kind === 'prop' ? propIcon(ent.type) : fallbackIcon;
       const marker = ent.kind === 'character'
         ? `<span class="dot" style="background:${ent.colorHex || '#8a8f98'}"></span>`
         : `<i class="ph ${icon}"></i>`;
-      d.innerHTML = `${marker}<span class="nm">${escapeHtml(ent.name)}</span><button class="x" title="${t('Eliminar')}">x</button>`;
+      const lock = ent.locked ? `<i class="ph ph-lock lock-ind" title="${t('Bloqueado (no seleccionable con clic en el viewport)')}"></i>` : '';
+      const eye = ent.kind !== 'camera'
+        ? `<button class="eye${ent.visMode !== 'visible' ? ' off' : ''}" title="${t('Mostrar / ocultar')}"><i class="ph ${ent.visMode === 'hidden' ? 'ph-eye-slash' : (ent.visMode === 'viewport' ? 'ph-eye-closed' : 'ph-eye')}"></i></button>`
+        : '';
+      d.innerHTML = `${marker}<span class="nm">${lock}${escapeHtml(ent.name)}</span>${eye}<button class="x" title="${t('Eliminar')}">x</button>`;
       d.onclick = () => setSelected(ent);
       d.querySelector('.x').onclick = e => { e.stopPropagation(); deleteEnt(ent); };
+      const eyeBtn = d.querySelector('.eye');
+      if (eyeBtn) eyeBtn.onclick = e => {
+        e.stopPropagation();
+        setVisMode(ent, ent.visMode === 'hidden' ? 'visible' : 'hidden');
+        if (selected === ent) renderInspector();
+      };
+      // reordenar arrastrando dentro de su grupo (afecta pistas del timeline y prompt)
+      d.draggable = true;
+      d.addEventListener('dragstart', e => {
+        outlinerDrag = { arr, id: ent.id };
+        e.dataTransfer.effectAllowed = 'move';
+      });
+      d.addEventListener('dragover', e => {
+        if (outlinerDrag && outlinerDrag.arr === arr && outlinerDrag.id !== ent.id) {
+          e.preventDefault();
+          d.classList.add('drop-target');
+        }
+      });
+      d.addEventListener('dragleave', () => d.classList.remove('drop-target'));
+      d.addEventListener('drop', e => {
+        e.preventDefault();
+        d.classList.remove('drop-target');
+        if (!outlinerDrag || outlinerDrag.arr !== arr || outlinerDrag.id === ent.id) return;
+        const from = arr.findIndex(x => x.id === outlinerDrag.id);
+        const to = arr.findIndex(x => x.id === ent.id);
+        if (from < 0 || to < 0) return;
+        pushUndo();
+        arr.splice(to, 0, arr.splice(from, 1)[0]);
+        outlinerDrag = null;
+        renderOutliner(); refreshKfs(); refreshPipSelect();
+      });
+      d.addEventListener('dragend', () => { outlinerDrag = null; });
       el.appendChild(d);
     }
   }
@@ -1539,6 +1695,21 @@ function renderInspector() {
     <button class="btn outline w100" id="btnCamPrompt" style="margin-top:8px"><i class="ph ph-copy"></i> ${t('Copiar prompt de la toma')}</button>`;
   }
 
+  if (ent.kind !== 'camera') {
+    html += `
+    <div class="lbl">${t('Visibilidad')}</div>
+    <select id="inspVis">${VIS_MODES.map(([v, l]) => `<option value="${v}" ${ent.visMode === v ? 'selected' : ''}>${t(l)}</option>`).join('')}</select>
+    <div class="lbl">${t('Prompt generado')}</div>
+    <select id="inspPromptOv">
+      <option value="">${t('Según reglas de prompt')}</option>
+      <option value="include" ${ent.promptOverride === 'include' ? 'selected' : ''}>${t('Incluir siempre')}</option>
+      <option value="omit" ${ent.promptOverride === 'omit' ? 'selected' : ''}>${t('Omitir siempre')}</option>
+    </select>
+    <div class="row" style="margin-top:6px">
+      <label class="ck" title="${t('Marcado como auxiliar: las reglas de prompt pueden excluirlo')}"><input type="checkbox" id="inspAux" ${ent.aux ? 'checked' : ''}> ${t('Auxiliar')}</label>
+      <label class="ck" title="${t('Bloqueado (no seleccionable con clic en el viewport)')}"><input type="checkbox" id="inspLock" ${ent.locked ? 'checked' : ''}> ${t('Bloqueado')}</label>
+    </div>`;
+  }
   html += transformBlockHTML(ent);
   if (ent.kind !== 'camera') {
     const nk = ent.path ? ent.path.keyframes.length : 0;
@@ -1556,6 +1727,13 @@ function renderInspector() {
     renderCharList(); renderPropList(); renderPersp(); refreshKfs(); refreshPipSelect();
   });
   bindTransformInputs(ent);
+  const vSel = $('inspVis');
+  if (vSel) {
+    vSel.addEventListener('change', e => setVisMode(ent, e.target.value));
+    $('inspPromptOv').addEventListener('change', e => { pushUndo(); ent.promptOverride = e.target.value; });
+    $('inspAux').addEventListener('change', e => { pushUndo(); ent.aux = e.target.checked; });
+    $('inspLock').addEventListener('change', e => { pushUndo(); ent.locked = e.target.checked; renderOutliner(); });
+  }
   $('btnDup').onclick = () => duplicateEnt(ent);
   $('btnDel').onclick = () => deleteEnt(ent);
   const bp = $('btnEntPath');
@@ -1692,23 +1870,24 @@ function duplicateEnt(ent) {
   if (ent.kind === 'character') {
     if (ent.charKind === 'mannequin') {
       const n = addMannequin({ noUndo: true, color: ent.colorHex, name: ent.name + ' ' + t('copia'), role: ent.role,
-        emotion: ent.emotion, notes: ent.notes, pos: ent.root.position.clone().add(off), path: pathCopy() });
+        emotion: ent.emotion, notes: ent.notes, pos: ent.root.position.clone().add(off), path: pathCopy(),
+        ...serializeVis(ent) });
       n.root.rotation.copy(ent.root.rotation); n.root.scale.copy(ent.root.scale);
       applyPose(n, currentPoseOf(ent), ent.poseName);
       renderInspector();
     } else {
       instantiateGlb(ent.assetId, 'character', { name: ent.name + ' ' + t('copia'), role: ent.role, notes: ent.notes,
-        emotion: ent.emotion, color: ent.colorHex, tintOnly: ent.tintOnly,
+        emotion: ent.emotion, color: ent.colorHex, tintOnly: ent.tintOnly, ...serializeVis(ent),
         pose: currentPoseOf(ent), poseName: ent.poseName, path: pathCopy(),
         pos: v3(ent.root.position.clone().add(off)), rot: eDeg(ent.root.rotation), scale: v3(ent.root.scale) }, true);
     }
   } else if (ent.kind === 'prop') {
     if (ent.type === 'glb') {
-      instantiateGlb(ent.assetId, 'prop', { name: ent.name + ' ' + t('copia'), path: pathCopy(),
+      instantiateGlb(ent.assetId, 'prop', { name: ent.name + ' ' + t('copia'), path: pathCopy(), ...serializeVis(ent),
         pos: v3(ent.root.position.clone().add(off)), rot: eDeg(ent.root.rotation), scale: v3(ent.root.scale) }, true);
     } else {
       const n = addProp(ent.type, { noUndo: true, color: ent.colorHex, name: ent.name + ' ' + t('copia'),
-        pos: ent.root.position.clone().add(off), path: pathCopy(),
+        pos: ent.root.position.clone().add(off), path: pathCopy(), ...serializeVis(ent),
         lightParams: ent.lightParams ? { ...ent.lightParams } : undefined });
       n.root.rotation.copy(ent.root.rotation); n.root.scale.copy(ent.root.scale);
     }
@@ -1855,6 +2034,7 @@ function duplicateCamera(ent) {
 }
 function removeCameraEnt(ent) {
   if (viewCam === ent.cam) setViewCamera(null);
+  if (lastCamView === ent) lastCamView = null;
   if (pipEnt === ent) { pipEnt = null; pipChoiceId = null; }
   scene.remove(ent.cam);
   if (ent.pathViz) { scene.remove(ent.pathViz); disposeObject(ent.pathViz); }
@@ -1865,10 +2045,11 @@ function removeCameraEnt(ent) {
 }
 
 // ---------- cambiar la vista principal ----------
+let lastCamView = null;   // última cámara usada como vista (para alternar con Vista Libre)
 function setViewCamera(ent) {
   if (ent) {
     if (viewCam === freeCam) freeTargetSaved.copy(controls.target);
-    viewCam = ent.cam; activeCamEnt = ent;
+    viewCam = ent.cam; activeCamEnt = ent; lastCamView = ent;
     controls.object = ent.cam;
     const dir = new THREE.Vector3();
     ent.cam.getWorldDirection(dir);
@@ -2133,7 +2314,18 @@ function samplePath(ent, t) {
   } else {
     pos = new THREE.Vector3(...k0.pos).lerp(new THREE.Vector3(...k1.pos), ue);
   }
-  const quat = kfQuat(k0).slerp(kfQuat(k1), ue);
+  let quat;
+  if (ent.path.rotMode === 'euler') {
+    // interpolación Euler por componentes: permite giros de más de 360°
+    // (vueltas completas); el slerp de cuaterniones siempre toma el camino corto
+    const ro = k0.o || k1.o || 'XYZ';
+    quat = new THREE.Quaternion().setFromEuler(new THREE.Euler(
+      DEG(k0.rot[0] + (k1.rot[0] - k0.rot[0]) * ue),
+      DEG(k0.rot[1] + (k1.rot[1] - k0.rot[1]) * ue),
+      DEG(k0.rot[2] + (k1.rot[2] - k0.rot[2]) * ue), ro));
+  } else {
+    quat = kfQuat(k0).slerp(kfQuat(k1), ue);
+  }
   const fov = (k0.fov ?? 40) + ((k1.fov ?? 40) - (k0.fov ?? 40)) * ue;
   // pose del personaje: se mezcla entre keyframes que la tengan guardada
   const pose = k0.pose && k1.pose ? lerpPose(k0.pose, k1.pose, ue) : (k0.pose || k1.pose || null);
@@ -2192,10 +2384,14 @@ function updatePathViz(ent) {
 }
 
 // ---------- interfaz del timeline ----------
+const ROT_MODES = [['quat', 'Rotación más corta (cuaternión)'], ['euler', 'Rotación Euler (permite >360°)']];
 function buildInterpOptions() {
   const cur = $('tlInterp').value;
   $('tlInterp').innerHTML = INTERPS.map(([v, l]) => `<option value="${v}">${t(l)}</option>`).join('');
   if (cur) $('tlInterp').value = cur;
+  const curR = $('tlRotMode').value;
+  $('tlRotMode').innerHTML = ROT_MODES.map(([v, l]) => `<option value="${v}">${t(l)}</option>`).join('');
+  if (curR) $('tlRotMode').value = curR;
 }
 buildInterpOptions();
 
@@ -2312,6 +2508,7 @@ function refreshKfs() {
   if (!tlEnt) { el.innerHTML = `<span class="hint" style="margin:0">${t('Sin entidad seleccionada.')}</span>`; refreshTracks(); updateScrubMax(); tlTimeLabel(); return; }
   if (!tlEnt.path) tlEnt.path = { interpolation: 'catmullrom', keyframes: [] };
   $('tlInterp').value = tlEnt.path.interpolation;
+  $('tlRotMode').value = tlEnt.path.rotMode || 'quat';
   $('tlKfHint').textContent = tlEnt.kind === 'camera'
     ? t('Cada keyframe guarda posición, rotación y FOV de la cámara.')
     : (tlEnt.kind === 'character' && (tlEnt.joints || tlEnt.rig))
@@ -2349,6 +2546,11 @@ $('tlInterp').addEventListener('change', e => {
   pushUndo();
   tlEnt.path.interpolation = e.target.value;
   updatePathViz(tlEnt);
+});
+$('tlRotMode').addEventListener('change', e => {
+  if (!tlEnt) return;
+  pushUndo();
+  tlEnt.path.rotMode = e.target.value;
 });
 $('tlAddKf').onclick = () => {
   if (!tlEnt) { toast('Selecciona una entidad en el timeline'); return; }
@@ -2397,7 +2599,7 @@ $('tlStop').onclick = () => {
   tlTimeLabel();
 };
 $('tlCap').onclick = () => { captureFrame(tlEnt && tlEnt.kind === 'camera' ? tlEnt : activeCamEnt); };
-$('tlVideo').onclick = () => exportVideo();
+$('tlVideo').onclick = () => openExportVideoModal();
 
 function tickPlayback(dt) {
   if (!PB.playing) return;
@@ -2412,10 +2614,18 @@ function tickPlayback(dt) {
   tlTimeLabel();
 }
 
-/* ---------- exportación de video (WebM) ---------- */
+/* ---------- exportación de video (WebM / MP4 H.264 si el navegador lo soporta) ---------- */
+const VIDEO_FORMATS = {
+  webm: { label: 'WebM (VP9/VP8)', ext: 'webm', mimes: ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'] },
+  mp4:  { label: 'MP4 (H.264)',    ext: 'mp4',  mimes: ['video/mp4;codecs=avc1.42E01E', 'video/mp4;codecs=avc1', 'video/mp4'] }
+};
+function videoFormatSupported(fmt) {
+  return typeof MediaRecorder !== 'undefined' && VIDEO_FORMATS[fmt].mimes.some(m => MediaRecorder.isTypeSupported(m));
+}
 let vidState = null;
-function exportVideo() {
+function exportVideo(format) {
   if (vidState) return;
+  const fdef = VIDEO_FORMATS[format] || VIDEO_FORMATS.webm;
   const camEnt = (tlEnt && tlEnt.kind === 'camera') ? tlEnt : (pipEnt || R.cameras[0]);
   if (!camEnt) { toast('Crea una camara primero'); return; }
   const dur = globalDuration();
@@ -2425,8 +2635,7 @@ function exportVideo() {
   }
   stopPB();
   sizeCapCanvas(camRatioVal(camEnt));
-  const mime = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']
-    .find(m => MediaRecorder.isTypeSupported(m)) || '';
+  const mime = fdef.mimes.find(m => MediaRecorder.isTypeSupported(m)) || '';
   const stream = capCanvas.captureStream(60);
   const rec = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: 14000000 } : undefined);
   const chunks = [];
@@ -2460,9 +2669,9 @@ function exportVideo() {
     if (cancelled) { toast('Exportación de video cancelada'); return; }
     const blob = new Blob(chunks, { type: mime || 'video/webm' });
     const url = URL.createObjectURL(blob);
-    download(`${sanitize(sceneName)}_${sanitize(camEnt.name)}.webm`, url);
+    download(`${sanitize(sceneName)}_${sanitize(camEnt.name)}.${fdef.ext}`, url);
     setTimeout(() => URL.revokeObjectURL(url), 5000);
-    toast(t('Video exportado ({s} s, {w}x{h} WebM)', { s: dur.toFixed(1), w: capCanvas.width, h: capCanvas.height }));
+    toast(t('Video exportado ({s} s, {w}x{h} {f})', { s: dur.toFixed(1), w: capCanvas.width, h: capCanvas.height, f: fdef.ext.toUpperCase() }));
   };
   rec.start(200);
   const t0 = performance.now();
@@ -2593,7 +2802,8 @@ const {
   escapeHtml,
   getViewCam: () => viewCam,
   getSceneName: () => sceneName,
-  getSceneDesc: () => sceneDesc
+  getSceneDesc: () => sceneDesc,
+  getPromptRules: () => promptRules
 });
 
 // ---------- tomas ----------
@@ -2739,12 +2949,14 @@ function serializeScene(opts = {}) {
       charKind: c.charKind, color: c.colorHex, tintOnly: !!c.tintOnly, assetId: c.assetId || null,
       position: v3(c.root.position), rotation: eDeg(c.root.rotation), scale: v3(c.root.scale),
       poseName: c.poseName, pose: (c.joints || c.rig) ? currentPoseOf(c) : null,
+      ...serializeVis(c),
       path: c.path && c.path.keyframes.length ? JSON.parse(JSON.stringify(c.path)) : null
     })),
     props: R.props.map(p => ({
       id: p.id, name: p.name, type: p.type, color: p.colorHex, assetId: p.assetId || null,
       position: v3(p.root.position), rotation: eDeg(p.root.rotation), scale: v3(p.root.scale),
       light: p.lightParams ? { ...p.lightParams } : null,
+      ...serializeVis(p),
       path: p.path && p.path.keyframes.length ? JSON.parse(JSON.stringify(p.path)) : null
     })),
     cameras: R.cameras.map(c => ({
@@ -2754,6 +2966,7 @@ function serializeScene(opts = {}) {
       path: JSON.parse(JSON.stringify(c.path))
     })),
     shots: JSON.parse(JSON.stringify(R.shots)),
+    collections: JSON.parse(JSON.stringify(R.collections || [])),
     nodeGraph: JSON.parse(JSON.stringify(R.nodeGraph || emptyGraph())),
     captures: opts.captures ? JSON.parse(JSON.stringify(R.captures)) : [],
     assets: opts.assets ? usedAssets() : {}
@@ -2785,6 +2998,7 @@ function clearScene(opts = {}) {
     disposeObject(c.viz);
   }
   R.characters.length = 0; R.props.length = 0; R.cameras.length = 0; R.shots.length = 0;
+  R.collections = [];
   R.nodeGraph = emptyGraph();
   if (!opts.keepCaptures) R.captures.length = 0;
   // los assets (GLB en base64) se conservan siempre: las entidades de escenas
@@ -2808,10 +3022,12 @@ function applySceneData(data, opts = {}) {
       if (c.charKind === 'glb') {
         instantiateGlb(c.assetId, 'character', { id: c.id, name: c.name, role: c.role, emotion: c.emotion,
           notes: c.notes, color: c.color, tintOnly: !!c.tintOnly, pose: c.pose, poseName: c.poseName,
+          visMode: c.visMode, aux: c.aux, locked: c.locked, promptOverride: c.promptOverride,
           pos: c.position, rot: c.rotation, scale: c.scale, path: c.path || null }, false);
       } else {
         const ent = addMannequin({ noUndo: true, noSelect: true, id: c.id, name: c.name, role: c.role,
-          emotion: c.emotion, notes: c.notes, color: c.color, pos: c.position, path: c.path || undefined });
+          emotion: c.emotion, notes: c.notes, color: c.color, pos: c.position, path: c.path || undefined,
+          visMode: c.visMode, aux: c.aux, locked: c.locked, promptOverride: c.promptOverride });
         ent.root.rotation.set(DEG(c.rotation[0]), DEG(c.rotation[1]), DEG(c.rotation[2]));
         ent.root.scale.set(...(c.scale || [1, 1, 1]));
         if (c.pose) applyPose(ent, c.pose, c.poseName);
@@ -2821,10 +3037,12 @@ function applySceneData(data, opts = {}) {
     for (const p of data.props || []) {
       if (p.type === 'glb') {
         instantiateGlb(p.assetId, 'prop', { id: p.id, name: p.name, pos: p.position, rot: p.rotation,
+          visMode: p.visMode, aux: p.aux, locked: p.locked, promptOverride: p.promptOverride,
           scale: p.scale, path: p.path || null }, false);
       } else {
         const ent = addProp(p.type, { noUndo: true, noSelect: true, id: p.id, name: p.name, color: p.color,
-          pos: p.position, lightParams: p.light || undefined, path: p.path || undefined });
+          pos: p.position, lightParams: p.light || undefined, path: p.path || undefined,
+          visMode: p.visMode, aux: p.aux, locked: p.locked, promptOverride: p.promptOverride });
         ent.root.rotation.set(DEG(p.rotation[0]), DEG(p.rotation[1]), DEG(p.rotation[2]));
         ent.root.scale.set(...(p.scale || [1, 1, 1]));
       }
@@ -2836,6 +3054,7 @@ function applySceneData(data, opts = {}) {
     }
     camCounter = R.cameras.length;
     R.shots.push(...(data.shots || []));
+    R.collections = Array.isArray(data.collections) ? JSON.parse(JSON.stringify(data.collections)) : [];
     if (data.nodeGraph && Array.isArray(data.nodeGraph.nodes)) R.nodeGraph = JSON.parse(JSON.stringify(data.nodeGraph));
     if (!opts.keepCaptures && data.captures && data.captures.length) {
       R.captures.push(...data.captures);
@@ -2907,7 +3126,7 @@ function saveSceneLocal(name, silent) {
 }
 function fmtDate(iso) { try { return new Date(iso).toLocaleString(getLang(), { dateStyle: 'short', timeStyle: 'short' }); } catch { return ''; } }
 
-$('btnSave').onclick = () => {
+function openSaveSceneModal() {
   openModal(t('Guardar escena'), `
     <div class="mrow"><label>${t('Nombre')}</label><input type="text" id="mSaveName" value="${escapeHtml(sceneName)}"></div>
     <div class="hint">${t('Se guarda en este navegador. Las capturas no se incluyen aqui: usa Exportar para generar un archivo completo con capturas y modelos GLB.')}</div>
@@ -2917,8 +3136,8 @@ $('btnSave').onclick = () => {
     sceneName = n; $('inpSceneName').value = n;
     if (saveSceneLocal(n)) closeModal();
   };
-};
-$('btnOpen').onclick = () => {
+}
+function openOpenSceneModal() {
   const all = savedScenes();
   const names = Object.keys(all).sort();
   if (!names.length) {
@@ -2945,25 +3164,24 @@ $('btnOpen').onclick = () => {
       const copy = n + ' ' + t('copia');
       all[copy] = JSON.parse(JSON.stringify(all[n]));
       try { persistScenes(all); } catch { toast('Sin espacio para duplicar'); return; }
-      $('btnOpen').onclick();
+      openOpenSceneModal();
     };
     row.querySelector('[data-a="del"]').onclick = () => {
       delete all[n];
       try { persistScenes(all); } catch {}
-      $('btnOpen').onclick();
+      openOpenSceneModal();
     };
   });
-};
+}
 
-// ---------- exportar / importar / nueva ----------
-$('btnExport').onclick = () => {
+// ---------- exportar / importar / nueva (acciones del menú Archivo) ----------
+function exportSceneJson() {
   const blob = new Blob([JSON.stringify(serializeScene({ assets: true, captures: true }))], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   download(sanitize(sceneName) + '.blockout.json', url);
   setTimeout(() => URL.revokeObjectURL(url), 5000);
   toast('Escena exportada como archivo JSON (incluye GLB y capturas)');
-};
-$('btnImport').onclick = () => $('fileImport').click();
+}
 $('fileImport').addEventListener('change', e => {
   const f = e.target.files[0];
   if (!f) return;
@@ -2977,7 +3195,7 @@ $('fileImport').addEventListener('change', e => {
     toast(t('Escena "{n}" importada', { n: data.sceneName }));
   }).catch(err => { console.error(err); toast('No se pudo leer el archivo JSON'); });
 });
-$('btnNew').onclick = () => {
+function openNewSceneModal() {
   openModal(t('Nueva escena'), `
     <div class="hint">${t('Se creara una escena vacia. La actual se puede recuperar con Deshacer (Ctrl+Z), o desde Abrir si la guardaste.')}</div>
     <div class="mrow"><label>${t('Nombre')}</label><input type="text" id="mNewName" value="${t('Escena')}_${String(Object.keys(savedScenes()).length + 1).padStart(3, '0')}"></div>
@@ -2993,10 +3211,10 @@ $('btnNew').onclick = () => {
     closeLauncher();
     toast('Escena nueva creada');
   };
-};
+}
 
-// ---------- guia ----------
-$('btnGuide').onclick = () => openModal(t('Guia rapida'), `
+// ---------- guia (Ayuda > Guía rápida) ----------
+const openGuideModal = () => openModal(t('Guia rapida'), `
   <p style="margin-top:0">${t('<b>Blockout Director</b> es tu set virtual: monta la escena, dirige las camaras y captura fotogramas de referencia para mantener consistencia en herramientas de IA generativa.')}</p>
   <div class="lbl">${t('Flujo de trabajo')}</div>
   <ol style="margin:4px 0;padding-left:18px;line-height:1.7">
@@ -3145,9 +3363,8 @@ function renderLauncher() {
     el.appendChild(card);
   }
 }
-$('btnProjects').onclick = openLauncher;
 $('lcContinue').onclick = closeLauncher;
-$('lcNew').onclick = () => $('btnNew').onclick();
+$('lcNew').onclick = () => openNewSceneModal();
 $('lcImport').onclick = () => $('fileImport').click();
 $('lcSample').onclick = () => {
   saveActiveScene();
@@ -3160,6 +3377,486 @@ $('lcSample').onclick = () => {
 };
 
 /* ============================================================
+   BARRA DE MENÚ - File/Edit/View/Director/Tools/Window/Help
+   Modales de las herramientas nuevas + definición de los menús.
+   ============================================================ */
+
+// Guardar rápido: si la escena ya existe en el navegador se sobrescribe;
+// si aún no se guardó nunca, abre el diálogo de Guardar como
+function fileSaveQuick() {
+  if (savedScenes()[sceneName]) saveSceneLocal(sceneName);
+  else openSaveSceneModal();
+}
+
+// --- File > Exportar prompt ---
+function openExportPromptModal() {
+  const p = generatePrompt(activeCamEnt, activeCamEnt ? activeCamEnt.shotType : 'Plano general', '');
+  openModal(t('Exportar prompt'), `
+    <textarea id="mExpPrompt" rows="14" readonly style="font-size:12px;line-height:1.5">${escapeHtml(p)}</textarea>
+    <div class="grid2" style="margin-top:10px">
+      <button class="btn primary" id="mExpCopy">${t('Copiar prompt')}</button>
+      <button class="btn outline" id="mExpDl">${t('Descargar .txt')}</button>
+    </div>
+    <div class="hint">${t('Generado desde {v}. Las reglas de Director > Ajustes de prompt ya están aplicadas.', { v: camDisplayName(activeCamEnt) })}</div>`);
+  $('mExpCopy').onclick = () => copyText($('mExpPrompt').value);
+  $('mExpDl').onclick = () => {
+    const url = URL.createObjectURL(new Blob([$('mExpPrompt').value], { type: 'text/plain' }));
+    download(sanitize(sceneName) + '_prompt.txt', url);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  };
+}
+
+// --- File > Exportar video (elige formato WebM / MP4) ---
+function openExportVideoModal() {
+  const camEnt = (tlEnt && tlEnt.kind === 'camera') ? tlEnt : (pipEnt || R.cameras[0]);
+  const dur = globalDuration();
+  const supported = Object.keys(VIDEO_FORMATS).filter(videoFormatSupported);
+  const fmts = Object.entries(VIDEO_FORMATS).map(([k, f]) => {
+    const ok = supported.includes(k);
+    return `<label class="ck" style="display:block;margin:4px 0">
+      <input type="radio" name="mVidFmt" value="${k}" ${ok && k === supported[0] ? 'checked' : ''} ${ok ? '' : 'disabled'}>
+      ${f.label}${ok ? '' : ` <span class="hint" style="margin:0">(${t('no soportado por este navegador')})</span>`}</label>`;
+  }).join('');
+  openModal(t('Exportar video'), `
+    <div class="mrow"><label>${t('Cámara')}</label><div>${escapeHtml(camEnt ? camEnt.name : '—')}</div></div>
+    <div class="mrow"><label>${t('Duración')}</label><div>${dur.toFixed(1)} s</div></div>
+    <div class="mrow"><label>${t('Formato')}</label><div>${fmts}</div></div>
+    <div class="hint">${t('MP4 (H.264) mejora la compatibilidad con otras plataformas, pero depende del navegador (Chrome/Edge recientes). Si no está disponible, usa WebM.')}</div>
+    <div class="mrow"><button class="btn primary w100" id="mVidOk">${t('Exportar video')}</button></div>`);
+  $('mVidOk').onclick = () => {
+    const sel = document.querySelector('input[name="mVidFmt"]:checked');
+    if (!sel) { toast('Tu navegador no soporta la grabación de video (MediaRecorder)'); return; }
+    closeModal();
+    exportVideo(sel.value);
+  };
+}
+
+// --- Director > Ajustes de cámara (pitch / yaw / roll explícitos) ---
+function openCameraSettingsModal(entArg) {
+  if (!R.cameras.length) { toast('Crea una camara primero'); return; }
+  const ent = entArg || ((selected && selected.kind === 'camera') ? selected : (activeCamEnt || R.cameras[0]));
+  const r = eDeg(ent.cam.rotation);   // orden YXZ: [pitch, yaw, roll] puros
+  openModal(t('Ajustes de cámara'), `
+    <div class="mrow"><label>${t('Cámara')}</label><select id="mCamSel">${R.cameras.map(c =>
+      `<option value="${c.id}" ${c === ent ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}</select></div>
+    <div class="mrow"><label>Pitch (X) · ${t('picado / contrapicado')}</label><input type="number" id="mCamPitch" step="1" value="${r[0]}"></div>
+    <div class="mrow"><label>Yaw (Y) · ${t('paneo')}</label><input type="number" id="mCamYaw" step="1" value="${r[1]}"></div>
+    <div class="mrow"><label>Roll (Z) · ${t('inclinación (Dutch angle)')}</label><input type="number" id="mCamRoll" step="1" value="${r[2]}"></div>
+    <div class="mrow"><label>FOV (°)</label><input type="number" id="mCamFov" min="5" max="115" step="0.5" value="${+ent.cam.fov.toFixed(1)}"></div>
+    <div class="grid2" style="margin-top:10px">
+      <button class="btn primary" id="mCamApply">${t('Aplicar')}</button>
+      <button class="btn outline" id="mCamLook">${t('Ver por cámara')}</button>
+    </div>
+    <div class="hint">${t('Pitch +90° mira al cénit y -90° al nadir; el roll inclina el horizonte.')}</div>`);
+  $('mCamSel').addEventListener('change', e => {
+    const next = R.cameras.find(c => c.id === e.target.value);
+    if (next) openCameraSettingsModal(next);
+  });
+  $('mCamApply').onclick = () => {
+    pushUndo();
+    ent.cam.rotation.set(DEG(+$('mCamPitch').value || 0), DEG(+$('mCamYaw').value || 0), DEG(+$('mCamRoll').value || 0));
+    ent.cam.fov = THREE.MathUtils.clamp(+$('mCamFov').value || 40, 5, 115);
+    ent.cam.updateProjectionMatrix();
+    updateFrustumViz(ent);
+    if (viewCam === ent.cam) {
+      const dir = new THREE.Vector3();
+      ent.cam.getWorldDirection(dir);
+      controls.target.copy(ent.cam.position).add(dir.multiplyScalar(4));
+      const roll = ent.cam.rotation.z;
+      controls.update();
+      ent.cam.rotation.z = roll;
+    }
+    if (selected === ent) syncInspectorFromSel();
+    toast(t('Cámara "{n}" actualizada', { n: ent.name }));
+  };
+  $('mCamLook').onclick = () => { setViewCamera(ent); closeModal(); };
+}
+
+// --- Director > Notas de escena ---
+function openSceneNotesModal() {
+  openModal(t('Notas de escena'), `
+    <div class="mrow"><label>${t('Nombre')}</label><input type="text" id="mSnName" value="${escapeHtml(sceneName)}"></div>
+    <div class="mrow"><label>${t('Descripción')}</label><textarea id="mSnDesc" rows="4">${escapeHtml(sceneDesc)}</textarea></div>
+    <div class="hint">${t('La descripción se usa en los prompts generados.')}</div>
+    <div class="mrow"><button class="btn primary w100" id="mSnOk">${t('Guardar')}</button></div>`);
+  $('mSnOk').onclick = () => {
+    sceneName = $('mSnName').value.trim() || sceneName;
+    sceneDesc = $('mSnDesc').value;
+    $('inpSceneName').value = sceneName;
+    $('inpSceneDesc').value = sceneDesc;
+    closeModal();
+    toast('Notas de escena actualizadas');
+  };
+}
+
+// --- Director > Ajustes de prompt (reglas de exclusión) ---
+const PROMPT_RULE_LABELS = [
+  ['omitHidden', 'Omitir objetos ocultos y de solo viewport'],
+  ['omitCopies', 'Omitir props con «copia» o «copy» en el nombre'],
+  ['omitDupes', 'Omitir props duplicados (mismo tipo y nombre base)'],
+  ['omitAux', 'Omitir props marcados como auxiliares']
+];
+function openPromptSettingsModal() {
+  openModal(t('Ajustes de prompt'), PROMPT_RULE_LABELS.map(([k, l]) =>
+    `<label class="ck" style="display:block;margin:6px 0"><input type="checkbox" data-rule="${k}" ${promptRules[k] ? 'checked' : ''}> ${t(l)}</label>`).join('') + `
+    <div class="hint">${t('Excepciones manuales: cada objeto puede forzar «Incluir siempre» u «Omitir siempre» desde el inspector o desde Visibilidad de props.')}</div>
+    <button class="btn outline w100" id="mPromptVis">${t('Visibilidad de props…')}</button>`);
+  document.querySelectorAll('#modalBody [data-rule]').forEach(cb => cb.addEventListener('change', () => {
+    promptRules[cb.dataset.rule] = cb.checked;
+    savePromptRules();
+  }));
+  $('mPromptVis').onclick = openPropVisibilityModal;
+}
+
+// --- Director > Visibilidad de props (control por entidad) ---
+function openPropVisibilityModal() {
+  const ents = [...R.characters, ...R.props];
+  if (!ents.length) {
+    openModal(t('Visibilidad de props'), `<div class="hint">${t('Sin personajes ni props en la escena.')}</div>`);
+    return;
+  }
+  const rows = ents.map(en => `
+    <div class="vis-row" data-ent="${en.id}">
+      <span class="nm" title="${escapeHtml(en.name)}">${escapeHtml(en.name)}</span>
+      <select data-vis>${VIS_MODES.map(([v, l]) => `<option value="${v}" ${en.visMode === v ? 'selected' : ''}>${t(l)}</option>`).join('')}</select>
+      <select data-pov>
+        <option value="">${t('Según reglas')}</option>
+        <option value="include" ${en.promptOverride === 'include' ? 'selected' : ''}>${t('Incluir siempre')}</option>
+        <option value="omit" ${en.promptOverride === 'omit' ? 'selected' : ''}>${t('Omitir siempre')}</option>
+      </select>
+      <label class="ck" title="${t('Marcado como auxiliar: las reglas de prompt pueden excluirlo')}"><input type="checkbox" data-aux ${en.aux ? 'checked' : ''}> aux</label>
+    </div>`).join('');
+  openModal(t('Visibilidad de props'), `
+    <div class="vis-row vis-head"><span class="nm">${t('Objeto')}</span><span>${t('Visibilidad')}</span><span>${t('Prompt generado')}</span><span></span></div>
+    ${rows}
+    <div class="hint">${t('«Solo viewport» se ve al editar pero queda fuera de capturas, preview final, video y prompt.')}</div>`);
+  document.querySelectorAll('#modalBody .vis-row[data-ent]').forEach(row => {
+    const en = findEnt(row.dataset.ent);
+    if (!en) return;
+    row.querySelector('[data-vis]').addEventListener('change', e => {
+      setVisMode(en, e.target.value);
+      if (selected === en) renderInspector();
+    });
+    row.querySelector('[data-pov]').addEventListener('change', e => {
+      pushUndo(); en.promptOverride = e.target.value;
+      if (selected === en) renderInspector();
+    });
+    row.querySelector('[data-aux]').addEventListener('change', e => {
+      pushUndo(); en.aux = e.target.checked;
+      if (selected === en) renderInspector();
+    });
+  });
+}
+
+// --- Tools > Preferencias ---
+function openPreferencesModal() {
+  openModal(t('Preferencias'), `
+    <div class="mrow"><label>${t('Idioma')}</label><button class="btn outline" id="mPrefLang"><i class="ph ph-globe"></i> ${getLang() === 'es' ? 'Español → English' : 'English → Español'}</button></div>
+    <label class="ck" style="display:block;margin:8px 0"><input type="checkbox" id="mPrefWrap" ${prefs.cursorWrap ? 'checked' : ''}> ${t('Cursor infinito en vuelo libre (Pointer Lock)')}</label>
+    <label class="ck" style="display:block;margin:8px 0"><input type="checkbox" id="mPrefLabels" ${env.labels ? 'checked' : ''}> ${t('Etiquetas 3D sobre personajes y cámaras')}</label>
+    <div class="hint">${t('Cursor infinito: al volar con clic derecho, el ratón no se detiene en el borde de la pantalla. El gizmo de mover/rotar/escalar usa la posición real del cursor, por lo que ahí no aplica.')}</div>`);
+  $('mPrefLang').onclick = () => { closeModal(); toggleLang(); };
+  $('mPrefWrap').addEventListener('change', e => { prefs.cursorWrap = e.target.checked; savePrefs(); });
+  $('mPrefLabels').addEventListener('change', e => { env.labels = e.target.checked; syncEnvUI(); });
+}
+
+// --- Tools > Atajos de teclado (configurables) ---
+function fmtKeyLabel(sig) {
+  return sig
+    ? sig.split('+').map(p => p.length === 1 ? p.toUpperCase() : p[0].toUpperCase() + p.slice(1)).join('+')
+    : t('— sin asignar —');
+}
+function openInputSettingsModal() {
+  const rows = Object.keys(DEFAULT_KEYS).map(a => `
+    <div class="key-row">
+      <span class="nm">${t(KEY_ACTION_LABELS[a])}</span>
+      <button class="btn outline key-btn" data-keybtn="${a}">${fmtKeyLabel(keymap[a])}</button>
+    </div>`).join('');
+  openModal(t('Atajos de teclado'), rows + `
+    <div class="hint">${t('Clic en un atajo y pulsa la nueva tecla o combinación. Retroceso/Supr lo deja sin asignar; Esc cancela.')}</div>
+    <div class="hint">${t('Atajos fijos')}: W/E/R · F · Supr · Ctrl+Z / Ctrl+Y · Esc</div>
+    <button class="btn outline w100" id="mKeysReset">${t('Restablecer atajos por defecto')}</button>`);
+  document.querySelectorAll('#modalBody [data-keybtn]').forEach(btn => {
+    btn.onclick = () => {
+      btn.textContent = t('Pulsa una tecla…');
+      const onKey = e => {
+        e.preventDefault(); e.stopPropagation();
+        if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return;   // esperar la tecla base
+        const act = btn.dataset.keybtn;
+        if (e.key === 'Escape') { /* cancelar */ }
+        else if (e.key === 'Backspace' || e.key === 'Delete') { keymap[act] = ''; saveKeymap(); }
+        else {
+          const sig = (e.ctrlKey ? 'ctrl+' : '') + (e.altKey ? 'alt+' : '') + (e.shiftKey ? 'shift+' : '') + e.key.toLowerCase();
+          for (const other in keymap) if (other !== act && keymap[other] === sig) keymap[other] = '';
+          keymap[act] = sig;
+          saveKeymap();
+        }
+        removeEventListener('keydown', onKey, true);
+        openInputSettingsModal();   // refresca todas las filas (por si se liberó un atajo duplicado)
+      };
+      addEventListener('keydown', onKey, true);
+    };
+  });
+  $('mKeysReset').onclick = () => { Object.assign(keymap, DEFAULT_KEYS); saveKeymap(); openInputSettingsModal(); };
+}
+
+// --- Tools > Modo de rotación ---
+function openRotationModeModal() {
+  const ent = tlEnt;
+  if (ent && !ent.path) ent.path = { interpolation: 'catmullrom', keyframes: [] };
+  openModal(t('Modo de rotación'), `
+    <p class="hint" style="margin-top:0">${t('Cuaternión: interpola por el camino más corto (sin gimbal lock, máximo 180° entre keyframes). Euler: interpola los ángulos tal cual, lo que permite vueltas completas de más de 360° entre dos keyframes.')}</p>
+    ${ent ? `<div class="mrow"><label>${t('Trayectoria de')} ${escapeHtml(ent.name)}</label>
+      <select id="mRotMode">${ROT_MODES.map(([v, l]) => `<option value="${v}" ${(ent.path.rotMode || 'quat') === v ? 'selected' : ''}>${t(l)}</option>`).join('')}</select></div>`
+      : `<div class="hint">${t('Abre Trayectorias y selecciona una entidad para cambiar su modo.')}</div>`}
+    <div class="hint">${t('También disponible como selector en el panel de Trayectorias.')}</div>`);
+  const sel = $('mRotMode');
+  if (sel) sel.addEventListener('change', e => {
+    pushUndo();
+    ent.path.rotMode = e.target.value;
+    $('tlRotMode').value = e.target.value;
+  });
+}
+
+// --- Tools > Ajustes de niebla ---
+function openFogSettingsModal() {
+  const autoColor = '#' + new THREE.Color(SKY_PRESETS[env.sky].bottom).getHexString();
+  openModal(t('Ajustes de niebla'), `
+    <label class="ck" style="display:block"><input type="checkbox" id="mFogOn" ${env.fog ? 'checked' : ''}> ${t('Niebla activa')}</label>
+    <div class="mrow"><label>${t('Modo')}</label><select id="mFogMode">
+      <option value="linear" ${env.fogMode !== 'exp' ? 'selected' : ''}>${t('Lineal (distancia inicial → final)')}</option>
+      <option value="exp" ${env.fogMode === 'exp' ? 'selected' : ''}>${t('Exponencial (densidad)')}</option>
+    </select></div>
+    <div class="mrow"><label>${t('Color')}</label>
+      <input type="color" id="mFogColor" value="${env.fogColor || autoColor}" ${env.fogColor ? '' : 'disabled'}>
+      <label class="ck"><input type="checkbox" id="mFogAuto" ${env.fogColor ? '' : 'checked'}> ${t('Usar color del cielo')}</label>
+    </div>
+    <div class="mrow" data-fog="linear"><label>${t('Distancia inicial')}</label><input type="range" id="mFogNear" min="0" max="200" step="1" value="${env.fogNear}"><span class="hint" style="margin:0;width:48px" id="mFogNearV">${env.fogNear} m</span></div>
+    <div class="mrow" data-fog="linear"><label>${t('Distancia final')}</label><input type="range" id="mFogFar" min="10" max="600" step="5" value="${env.fogFar}"><span class="hint" style="margin:0;width:48px" id="mFogFarV">${env.fogFar} m</span></div>
+    <div class="mrow" data-fog="exp"><label>${t('Densidad')}</label><input type="range" id="mFogDen" min="0.002" max="0.15" step="0.002" value="${env.fogDensity}"><span class="hint" style="margin:0;width:48px" id="mFogDenV">${env.fogDensity}</span></div>
+    <div class="hint">${t('La niebla por altura no está disponible: requiere modificar los materiales de toda la escena.')}</div>`);
+  const syncRows = () => {
+    document.querySelectorAll('#modalBody [data-fog]').forEach(rw =>
+      rw.style.display = rw.dataset.fog === (env.fogMode === 'exp' ? 'exp' : 'linear') ? '' : 'none');
+  };
+  syncRows();
+  $('mFogOn').addEventListener('change', e => { pushUndo(); env.fog = e.target.checked; applyEnv(); syncEnvUI(); });
+  $('mFogMode').addEventListener('change', e => { pushUndo(); env.fogMode = e.target.value; syncRows(); applyEnv(); });
+  $('mFogAuto').addEventListener('change', e => {
+    pushUndo();
+    env.fogColor = e.target.checked ? '' : $('mFogColor').value;
+    $('mFogColor').disabled = e.target.checked;
+    applyEnv();
+  });
+  $('mFogColor').addEventListener('change', e => { pushUndo(); env.fogColor = e.target.value; applyEnv(); });
+  const liveRange = (id, key, fmt) => {
+    $(id).addEventListener('pointerdown', () => pushUndo());
+    $(id).addEventListener('input', e => {
+      env[key] = +e.target.value;
+      $(id + 'V').textContent = fmt(+e.target.value);
+      applyEnv();
+    });
+  };
+  liveRange('mFogNear', 'fogNear', v => v + ' m');
+  liveRange('mFogFar', 'fogFar', v => v + ' m');
+  liveRange('mFogDen', 'fogDensity', v => String(v));
+}
+
+// --- Colecciones de escena (Edit > Agrupar / Window > Colecciones) ---
+function createCollection(withSelection) {
+  pushUndo();
+  const col = {
+    id: uid('col'),
+    name: `${t('Colección')} ${R.collections.length + 1}`,
+    ids: withSelection && selected ? [selected.id] : []
+  };
+  R.collections.push(col);
+  return col;
+}
+function openCollectionsModal() {
+  const ents = [...R.characters, ...R.props, ...R.cameras];
+  const cards = R.collections.map(col => `
+    <div class="col-card" data-col="${col.id}">
+      <div class="row">
+        <input type="text" data-colname value="${escapeHtml(col.name)}" style="flex:1">
+        <button class="mini" data-a="show" title="${t('Mostrar todos')}"><i class="ph ph-eye"></i></button>
+        <button class="mini" data-a="hide" title="${t('Ocultar todos')}"><i class="ph ph-eye-slash"></i></button>
+        <button class="mini" data-a="lock" title="${t('Bloquear / desbloquear todos')}"><i class="ph ph-lock"></i></button>
+        <button class="mini" data-a="del" title="${t('Desagrupar (la colección se elimina, los objetos no)')}">x</button>
+      </div>
+      <div class="col-members">${ents.map(en =>
+        `<label class="ck"><input type="checkbox" data-member="${en.id}" ${col.ids.includes(en.id) ? 'checked' : ''}> ${escapeHtml(en.name)}</label>`).join('') || `<span class="hint" style="margin:0">${t('Sin entidades en la escena.')}</span>`}</div>
+      <div class="row col-tr">
+        <label>ΔX</label><input type="number" data-tr="dx" step="0.1" value="0">
+        <label>ΔY</label><input type="number" data-tr="dy" step="0.1" value="0">
+        <label>ΔZ</label><input type="number" data-tr="dz" step="0.1" value="0">
+        <label>${t('Giro Y')}</label><input type="number" data-tr="ry" step="5" value="0">
+        <label>${t('Escala')}</label><input type="number" data-tr="sc" step="0.05" value="1">
+        <button class="mini" data-a="apply">${t('Aplicar a todos')}</button>
+      </div>
+    </div>`).join('') || `<div class="hint">${t('Sin colecciones. Crea una para agrupar personajes, props y cámaras por categorías (escenario, luces, auxiliares…).')}</div>`;
+  openModal(t('Colecciones de escena'), `
+    ${cards}
+    <button class="btn primary w100" id="mColNew" style="margin-top:8px"><i class="ph ph-plus"></i> ${t('Nueva colección')}${selected ? ` (${t('con la selección')})` : ''}</button>
+    <div class="hint">${t('Las colecciones agrupan objetos para mostrarlos, ocultarlos, bloquearlos o moverlos/rotarlos/escalarlos en bloque. Viajan con la escena.')}</div>`);
+  $('mColNew').onclick = () => { createCollection(true); openCollectionsModal(); };
+  document.querySelectorAll('#modalBody .col-card').forEach(card => {
+    const col = R.collections.find(c => c.id === card.dataset.col);
+    if (!col) return;
+    const members = () => col.ids.map(findEnt).filter(Boolean);
+    card.querySelector('[data-colname]').addEventListener('change', e => {
+      col.name = e.target.value.trim() || col.name;
+    });
+    card.querySelectorAll('[data-member]').forEach(cb => cb.addEventListener('change', () => {
+      pushUndo();
+      if (cb.checked) { if (!col.ids.includes(cb.dataset.member)) col.ids.push(cb.dataset.member); }
+      else col.ids = col.ids.filter(id => id !== cb.dataset.member);
+    }));
+    const vis = mode => {
+      pushUndo();
+      for (const en of members()) if (en.kind !== 'camera') { en.visMode = mode; applyVisibility(en); }
+      if (mode === 'hidden' && selected && col.ids.includes(selected.id) && selected.kind !== 'camera') setSelected(null);
+      renderOutliner();
+    };
+    card.querySelector('[data-a="show"]').onclick = () => vis('visible');
+    card.querySelector('[data-a="hide"]').onclick = () => vis('hidden');
+    card.querySelector('[data-a="lock"]').onclick = () => {
+      pushUndo();
+      const anyUnlocked = members().some(en => !en.locked);
+      for (const en of members()) en.locked = anyUnlocked;
+      renderOutliner();
+      toast(anyUnlocked ? 'Colección bloqueada' : 'Colección desbloqueada');
+    };
+    card.querySelector('[data-a="del"]').onclick = () => {
+      pushUndo();
+      R.collections = R.collections.filter(c => c !== col);
+      openCollectionsModal();
+    };
+    card.querySelector('[data-a="apply"]').onclick = () => {
+      const val = k => +card.querySelector(`[data-tr="${k}"]`).value || 0;
+      const dx = val('dx'), dy = val('dy'), dz = val('dz'), ry = val('ry');
+      const sc = +card.querySelector('[data-tr="sc"]').value || 1;
+      pushUndo();
+      for (const en of members()) {
+        const o = en.kind === 'camera' ? en.cam : en.root;
+        o.position.x += dx; o.position.y += dy; o.position.z += dz;
+        if (ry) o.rotation.y += DEG(ry);
+        if (sc !== 1 && en.kind !== 'camera') o.scale.multiplyScalar(sc);
+      }
+      if (selected) syncInspectorFromSel();
+      toast(t('Transformación aplicada a {n} objetos', { n: members().length }));
+    };
+  });
+}
+
+// --- definición de los menús ---
+const drawerTabBtn = (railId, tab) => document.querySelector(`#${railId} .rail-tab[data-tab="${tab}"]`);
+const menuKey = a => keymap[a] ? fmtKeyLabel(keymap[a]) : '';
+const envToggleItem = (label, key) => ({
+  label: t(label), checked: !!env[key],
+  action: () => { env[key] = !env[key]; applyEnv(); syncEnvUI(); }
+});
+const drawerItem = (railId, tab, label) => ({
+  label: t(label),
+  checked: document.body.dataset[railId === 'leftRail' ? 'drawer' : 'drawerR'] === tab,
+  action: () => { const b = drawerTabBtn(railId, tab); if (b) b.click(); }
+});
+
+const MENU_DEFS = [
+  { id: 'file', title: 'Archivo', items: () => [
+    { label: t('Nueva escena…'), action: openNewSceneModal },
+    { label: t('Abrir escena…'), action: openOpenSceneModal },
+    { label: t('Importar escena (JSON)…'), action: () => $('fileImport').click() },
+    { sep: true },
+    { label: t('Guardar'), action: fileSaveQuick },
+    { label: t('Guardar como…'), action: openSaveSceneModal },
+    { sep: true },
+    { label: t('Exportar prompt…'), shortcut: menuKey('exportPrompt'), action: openExportPromptModal },
+    { label: t('Exportar video…'), action: openExportVideoModal },
+    { label: t('Exportar escena (JSON)'), action: exportSceneJson },
+    { sep: true },
+    { label: t('Proyectos…'), action: openLauncher }
+  ] },
+  { id: 'edit', title: 'Edición', items: () => [
+    { label: t('Deshacer'), shortcut: 'Ctrl+Z', action: doUndo },
+    { label: t('Rehacer'), shortcut: 'Ctrl+Y', action: doRedo },
+    { sep: true },
+    { label: t('Duplicar'), shortcut: menuKey('duplicate'), disabled: !selected, action: () => selected && duplicateEnt(selected) },
+    { label: t('Eliminar'), shortcut: 'Supr', disabled: !selected, action: () => selected && deleteEnt(selected) },
+    { sep: true },
+    { label: t('Agrupar objetos…'), action: () => { createCollection(true); openCollectionsModal(); } },
+    { label: t('Desagrupar objetos…'), disabled: !R.collections.length, action: openCollectionsModal }
+  ] },
+  { id: 'view', title: 'Vista', items: () => [
+    { label: t('Vista libre'), shortcut: menuKey('toggleView'), checked: viewCam === freeCam, action: () => setViewCamera(null) },
+    { label: t('Ver por cámara'), disabled: !R.cameras.length, sub: () => R.cameras.map(c => ({
+        label: escapeHtml(c.name), checked: activeCamEnt === c, action: () => setViewCamera(c)
+      })) },
+    { sep: true },
+    envToggleItem('Cuadrícula', 'grid'),
+    envToggleItem('Sombras', 'shadows'),
+    envToggleItem('Niebla', 'fog'),
+    envToggleItem('Etiquetas', 'labels'),
+    { sep: true },
+    { label: R.props.some(p => p.visMode === 'hidden') ? t('Mostrar todos los props') : t('Ocultar todos los props'),
+      disabled: !R.props.length,
+      action: () => {
+        pushUndo();
+        const show = R.props.some(p => p.visMode === 'hidden');
+        for (const p of R.props) { p.visMode = show ? 'visible' : 'hidden'; applyVisibility(p); }
+        if (!show && selected && selected.kind === 'prop') setSelected(null);
+        renderOutliner();
+      } }
+  ] },
+  { id: 'director', title: 'Director', items: () => [
+    { label: t('Ajustes de cámara…'), disabled: !R.cameras.length, action: () => openCameraSettingsModal() },
+    { label: t('Guardar toma…'), action: () => $('btnShot').onclick() },
+    { sep: true },
+    { label: t('Trayectorias'), shortcut: menuKey('toggleTimeline'), checked: !$('timelinePanel').classList.contains('hidden'), action: () => $('btnTimeline').click() },
+    { label: t('Editor de keyframes'), action: () => {
+        if ($('timelinePanel').classList.contains('hidden')) openTimeline();
+        $('timelinePanel').classList.remove('kfs-off');
+        $('tlToggle').classList.add('active');
+      } },
+    { sep: true },
+    { label: t('Ajustes de prompt…'), action: openPromptSettingsModal },
+    { label: t('Visibilidad de props…'), action: openPropVisibilityModal },
+    { label: t('Notas de escena…'), action: openSceneNotesModal }
+  ] },
+  { id: 'tools', title: 'Herramientas', items: () => [
+    { label: t('Preferencias…'), action: openPreferencesModal },
+    { label: t('Atajos de teclado…'), action: openInputSettingsModal },
+    { sep: true },
+    { label: t('Cursor infinito (vuelo libre)'), checked: !!prefs.cursorWrap,
+      action: () => { prefs.cursorWrap = !prefs.cursorWrap; savePrefs(); } },
+    { label: t('Modo de rotación…'), action: openRotationModeModal },
+    { label: t('Ajustes de niebla…'), action: openFogSettingsModal }
+  ] },
+  { id: 'window', title: 'Ventana', items: () => [
+    drawerItem('leftRail', 'place', 'Colocar actores'),
+    drawerItem('leftRail', 'world', 'World Settings'),
+    drawerItem('leftRail', 'env', 'Entorno'),
+    drawerItem('leftRail', 'shots', 'Tomas'),
+    { sep: true },
+    drawerItem('rightRail', 'outliner', 'Outliner'),
+    drawerItem('rightRail', 'details', 'Details'),
+    drawerItem('rightRail', 'preview', 'Preview final'),
+    { sep: true },
+    { label: t('Trayectorias'), checked: !$('timelinePanel').classList.contains('hidden'), action: () => $('btnTimeline').click() },
+    { label: t('Colecciones de escena…'), action: openCollectionsModal }
+  ] },
+  { id: 'help', title: 'Ayuda', items: () => [
+    { label: t('Guía rápida'), action: openGuideModal },
+    { label: t('Atajos de teclado…'), action: openInputSettingsModal },
+    { sep: true },
+    { label: t('Cambiar idioma (ES/EN)'), shortcut: getLang() === 'es' ? '→ EN' : '→ ES', action: toggleLang },
+    { sep: true },
+    { label: t('Acerca de Blockout Director'), action: openAboutModal }
+  ] }
+];
+const menubarUI = initMenuBar(MENU_DEFS, { t });
+
+/* ============================================================
    IDIOMA - conmutador ES/EN
    ============================================================ */
 function refreshLanguage() {
@@ -3167,12 +3864,15 @@ function refreshLanguage() {
   document.title = t('Blockout Director - Consola de dirección 3D');
   applyStaticI18n();
   const next = getLang() === 'es' ? 'EN' : 'ES';
-  $('langLabel').textContent = next;
   $('lcLangLabel').textContent = next;
-  $('btnLang').title = $('lcLang').title = t('Cambiar idioma (ES/EN)');
+  $('lcLang').title = t('Cambiar idioma (ES/EN)');
   buildStaticUI();
   buildInterpOptions();
-  if (tlEnt && tlEnt.path) $('tlInterp').value = tlEnt.path.interpolation;
+  menubarUI.refreshTitles();
+  if (tlEnt && tlEnt.path) {
+    $('tlInterp').value = tlEnt.path.interpolation;
+    $('tlRotMode').value = tlEnt.path.rotMode || 'quat';
+  }
   syncEnvUI();
   renderCharList(); renderPropList(); renderPersp(); renderShots(); renderCaps();
   refreshPipSelect(); refreshKfs();
@@ -3182,7 +3882,6 @@ function refreshLanguage() {
   if (!$('launcher').classList.contains('hidden')) renderLauncher();
 }
 function toggleLang() { setLang(getLang() === 'es' ? 'en' : 'es'); refreshLanguage(); }
-$('btnLang').onclick = toggleLang;
 $('lcAbout').onclick = openAboutModal;
 $('lcLang').onclick = toggleLang;
 

@@ -7,6 +7,86 @@ y el proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
 
 ---
 
+## [0.17.4] - 2026-07-13
+
+### Cambiado
+- Se retiró también el botón **Proyectos** de la barra superior: el lanzador
+  se abre desde **Archivo > Proyectos…**. La barra queda solo con logo, menús
+  y las herramientas de trabajo (Mover/Rotar/Escalar, Capturar, Guardar toma,
+  Trayectoria, Production).
+
+## [0.17.3] - 2026-07-13
+
+### Cambiado
+- **Barra superior mínima**: se retiraron también los botones Exportar e
+  Importar (viven en el menú **Archivo**) y Guía (en **Ayuda**). El conmutador
+  de idioma ES/EN pasa al menú **Ayuda** (el lanzador de proyectos conserva el
+  suyo). En la barra quedan: logo, menús, Mover/Rotar/Escalar, Capturar,
+  Guardar toma, Trayectoria, Production y Proyectos.
+
+## [0.17.2] - 2026-07-13
+
+### Cambiado
+- **Barra superior más limpia**: se retiraron los botones de Deshacer/Rehacer
+  (ahora solo en el menú **Edición** y con Ctrl+Z / Ctrl+Y) y los botones
+  Nueva, Guardar y Abrir (ahora solo en el menú **Archivo**). Quedan en la
+  barra Proyectos, Exportar, Importar y Guía junto a las herramientas de
+  transformación y captura.
+
+## [0.17.1] - 2026-07-13
+
+### Corregido
+- **Los menús de la barra principal no se veían al hacer clic**: el `#topbar`
+  recorta su contenido (overflow) y los desplegables quedaban ocultos bajo la
+  barra. Ahora se montan como capa flotante sobre `<body>` con posición fija
+  (y se reencajan si se salen de la ventana), por lo que se muestran siempre.
+
+## [0.17.0] - 2026-07-13
+
+### Añadido
+- **Barra de menú principal** estilo software profesional (Archivo / Edición /
+  Vista / Director / Herramientas / Ventana / Ayuda) en la barra superior, con
+  submenús, marcas de estado y atajos visibles. Organiza todas las funciones
+  existentes y las nuevas sin saturar la interfaz.
+- **Archivo**: Nueva/Abrir/Importar/Guardar/Guardar como, **Exportar prompt**
+  (modal con copiar y descarga .txt) y **Exportar video con formato**: WebM y
+  MP4 (H.264) cuando el navegador lo soporta (Chrome/Edge recientes), para
+  mejor compatibilidad con editores y herramientas de IA.
+- **Edición**: Deshacer/Rehacer/Duplicar/Eliminar y **Agrupar/Desagrupar
+  objetos** mediante colecciones.
+- **Vista**: Vista libre, submenú «Ver por cámara», conmutadores de
+  cuadrícula/sombras/niebla/etiquetas y mostrar/ocultar todos los props.
+- **Director**: Ajustes de cámara (Pitch/Yaw/Roll y FOV explícitos), Guardar
+  toma, Trayectorias, Editor de keyframes, Ajustes de prompt, Visibilidad de
+  props y Notas de escena.
+- **Sistema de visibilidad por entidad**: Visible / Solo viewport (se ve al
+  editar pero queda fuera de capturas, preview, video y prompt) / Oculto;
+  más «Auxiliar», «Bloqueado» (no seleccionable con clic) y excepción de
+  prompt por objeto (según reglas / incluir siempre / omitir siempre).
+  Disponible en el inspector, en el ojo del Outliner y en Director >
+  Visibilidad de props. Se guarda con la escena.
+- **Reglas de exclusión del prompt** (Director > Ajustes de prompt): omitir
+  ocultos/solo-viewport, props con «copia/copy» en el nombre, duplicados por
+  tipo y nombre base, y props auxiliares; con excepciones manuales por objeto.
+- **Colecciones de escena** (Ventana > Colecciones / Edición > Agrupar):
+  agrupan personajes, props y cámaras para mostrar/ocultar/bloquear y aplicar
+  transformaciones en bloque (ΔX/ΔY/ΔZ, giro Y, escala). Viajan con la escena.
+- **Atajos configurables** (Herramientas > Atajos de teclado): alternar Vista
+  Libre/Cámara (C), cambiar cámara activa (N), crear keyframe (K), reproducir
+  (P), ocultar selección (H), duplicar (Ctrl+D), abrir Trayectorias (T) y
+  exportar prompt (Shift+E). Reasignables y persistentes.
+- **Cursor infinito** (Herramientas > Preferencias): Pointer Lock en el vuelo
+  libre para que el ratón no se detenga en el borde de la pantalla.
+- **Modo de rotación por trayectoria** (Herramientas > Modo de rotación y
+  selector en el panel de Trayectorias): cuaternión (camino más corto, sin
+  gimbal lock) o Euler (permite vueltas de más de 360° entre keyframes).
+- **Ajustes de niebla** (Herramientas > Ajustes de niebla): modo lineal
+  (distancia inicial/final) o exponencial (densidad), color propio o del
+  cielo. Se guarda con la escena.
+- **Outliner**: reordenar personajes, props y cámaras con arrastrar y soltar
+  (afecta el orden de las pistas del timeline y del prompt) y botón de ojo
+  para ocultar/mostrar.
+
 ## [0.16.1] - 2026-07-10
 
 ### Corregido

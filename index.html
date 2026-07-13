@@ -6,7 +6,7 @@
 <title>Blockout Director - Consola de dirección 3D</title>
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 <!-- ?v= evita que GitHub Pages/el navegador mezclen versiones cacheadas al publicar -->
-<link rel="stylesheet" href="./styles.css?v=0.16.1">
+<link rel="stylesheet" href="./styles.css?v=0.17.4">
 <script type="importmap">
 {
   "imports": {
@@ -30,11 +30,8 @@
 </div>
 
 <div id="topbar">
-  <div class="tb brand"><img class="brand-logo" src="./Slate/LogoAO.png" alt="Logo AO"><i class="ph ph-film-slate"></i><span class="brand-txt"><span class="brand-title">Blockout Director</span><span class="brand-ver">v0.16.0</span></span></div>
-  <div class="tb history-menu">
-    <button class="btn" id="btnUndo" data-i18n-title title="Deshacer (Ctrl+Z)"><i class="ph ph-arrow-counter-clockwise"></i></button>
-    <button class="btn" id="btnRedo" data-i18n-title title="Rehacer (Ctrl+Y)"><i class="ph ph-arrow-clockwise"></i></button>
-  </div>
+  <div class="tb brand"><img class="brand-logo" src="./Slate/LogoAO.png" alt="Logo AO"><i class="ph ph-film-slate"></i><span class="brand-txt"><span class="brand-title">Blockout Director</span><span class="brand-ver">v0.17.4</span></span></div>
+  <div class="tb" id="menubar"></div>
   <div class="tb seg" id="toolSeg">
     <button class="btn active" data-tool="translate" data-i18n data-i18n-title title="Mover (W)"><i class="ph ph-arrows-out-cardinal"></i> Mover</button>
     <button class="btn" data-tool="rotate" data-i18n data-i18n-title title="Rotar (E)"><i class="ph ph-arrows-clockwise"></i> Rotar</button>
@@ -47,18 +44,6 @@
   </div>
   <div class="tb graph-menu">
     <button class="btn" id="btnProductionGraph" data-i18n-title title="Production Graph: mapa de la producción y sus escenas"><i class="ph ph-graph"></i><span class="btn-label" data-i18n>Production</span></button>
-  </div>
-  <div class="tb file-menu">
-    <button class="btn" id="btnProjects" data-i18n-title title="Proyectos guardados"><i class="ph ph-squares-four"></i><span class="btn-label" data-i18n>Proyectos</span></button>
-    <button class="btn" id="btnNew" data-i18n-title title="Nueva escena"><i class="ph ph-file"></i><span class="btn-label" data-i18n>Nueva</span></button>
-    <button class="btn" id="btnSave" data-i18n-title title="Guardar en navegador"><i class="ph ph-floppy-disk"></i><span class="btn-label" data-i18n>Guardar</span></button>
-    <button class="btn" id="btnOpen" data-i18n-title title="Abrir escena guardada"><i class="ph ph-folder-open"></i><span class="btn-label" data-i18n>Abrir</span></button>
-    <button class="btn" id="btnExport" data-i18n-title title="Exportar JSON"><i class="ph ph-export"></i><span class="btn-label" data-i18n>Exportar</span></button>
-    <button class="btn" id="btnImport" data-i18n-title title="Importar JSON"><i class="ph ph-download-simple"></i><span class="btn-label" data-i18n>Importar</span></button>
-    <button class="btn" id="btnGuide" data-i18n-title title="Guía rápida"><i class="ph ph-question"></i><span class="btn-label" data-i18n>Guía</span></button>
-  </div>
-  <div class="tb lang-menu">
-    <button class="btn" id="btnLang" data-i18n-title title="Cambiar idioma (ES/EN)"><i class="ph ph-globe"></i> <span id="langLabel">EN</span></button>
   </div>
 </div>
 
@@ -207,6 +192,7 @@
 <div id="timelinePanel" class="card hidden">
   <div class="hd" data-i18n><i class="ph ph-path"></i> Trayectorias
     <select id="tlInterp" style="width:150px;margin-left:8px"></select>
+    <select id="tlRotMode" style="width:190px" data-i18n-title title="Modo de rotación de la trayectoria"></select>
     <button class="btn active" id="tlToggle" data-i18n-title title="Mostrar/ocultar editor de keyframes"><i class="ph ph-rows"></i></button>
     <button class="btn" id="tlClose" style="margin-left:auto"><i class="ph ph-x"></i></button>
   </div>
@@ -291,6 +277,6 @@
 <input type="file" id="fileGlb" accept=".glb" hidden>
 <input type="file" id="fileImport" accept=".json,application/json" hidden>
 
-<script type="module" src="./src/app.js?v=0.16.1"></script>
+<script type="module" src="./src/app.js?v=0.17.4"></script>
 </body>
 </html>
